@@ -515,8 +515,8 @@
       <div class="drop-zone" id="csvDropZone">
         <input type="file" id="csvFileInput" accept=".csv,.xlsx,.xls">
         <div class="drop-icon">📂</div>
-        <div class="drop-hint">CSVファイルをタップして選択</div>
-        <div class="drop-sub">家計簿アプリのエクスポートに対応<br>期間・分類・内容・JPY・収入/支出 の列が必要</div>
+        <div class="drop-hint">ファイルをタップして選択</div>
+        <div class="drop-sub">Excel (.xlsx) · CSV 両対応<br>期間・分類・内容・JPY・収入/支出 の列が必要</div>
       </div>
       <div class="loading-box" id="csvLoadingBox">
         <div class="spinner"></div>
@@ -997,78 +997,127 @@ document.getElementById('addBtn').onclick=async()=>{
   render();toast(`「${shop}」を追加したよ！`,'ok');
 };
 
-/* ── CSV IMPORT ── */
+/* ── CSV / XLSX IMPORT ── */
 let csvParsed=[];
 const csvDz=document.getElementById('csvDropZone'), csvFi=document.getElementById('csvFileInput');
 csvDz.addEventListener('dragover',e=>{e.preventDefault();csvDz.classList.add('over');});
 csvDz.addEventListener('dragleave',()=>csvDz.classList.remove('over'));
-csvDz.addEventListener('drop',e=>{e.preventDefault();csvDz.classList.remove('over');if(e.dataTransfer.files[0])handleCsv(e.dataTransfer.files[0]);});
-csvFi.addEventListener('change',()=>{if(csvFi.files[0])handleCsv(csvFi.files[0]);});
+csvDz.addEventListener('drop',e=>{e.preventDefault();csvDz.classList.remove('over');if(e.dataTransfer.files[0])handleImportFile(e.dataTransfer.files[0]);});
+csvFi.addEventListener('change',()=>{if(csvFi.files[0])handleImportFile(csvFi.files[0]);});
 
-function handleCsv(file){
+function handleImportFile(file){
   document.getElementById('csvLoadingBox').classList.add('on');
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{
-      csvParsed=parseCsv(e.target.result);
-      showCsvPreview(csvParsed);
-    }catch(err){toast('CSVの読み込みに失敗しました','err');}
-    finally{document.getElementById('csvLoadingBox').classList.remove('on');}
+  const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      let rows;
+      if(isXlsx){
+        // SheetJSを動的ロード
+        if(!window.XLSX){
+          await new Promise((res,rej)=>{
+            const s=document.createElement('script');
+            s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            s.onload=res; s.onerror=rej;
+            document.head.appendChild(s);
+          });
+        }
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws, {defval:''});
+        rows = parseRows(data);
+      } else {
+        const text = new TextDecoder('UTF-8').decode(e.target.result);
+        const data = csvToObjects(text);
+        rows = parseRows(data);
+      }
+      csvParsed = rows;
+      showCsvPreview(rows);
+    } catch(err) {
+      console.error(err);
+      toast('ファイルの読み込みに失敗しました','err');
+    } finally {
+      document.getElementById('csvLoadingBox').classList.remove('on');
+    }
   };
-  reader.readAsText(file,'UTF-8');
+  if(isXlsx) reader.readAsArrayBuffer(file);
+  else reader.readAsArrayBuffer(file);
+}
+
+function csvToObjects(text){
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
+  if(lines.length<2) throw new Error('空');
+  const header = splitLine(lines[0]).map(c=>c.replace(/[""]/g,'').trim());
+  return lines.slice(1).map(line=>{
+    const vals = splitLine(line).map(c=>c.replace(/[""]/g,'').trim());
+    const obj={};
+    header.forEach((h,i)=>{ obj[h]=vals[i]??''; });
+    return obj;
+  });
 }
 
 function splitLine(line){
   const res=[];let cur='',inQ=false;
   for(let i=0;i<line.length;i++){
     const c=line[i];
-    if((c==='"'||c==='\u201c'||c==='\u201d')&&!inQ){inQ=true;continue;}
+    if((c==='"'||c==='\u201c')&&!inQ){inQ=true;continue;}
     if((c==='"'||c==='\u201d')&&inQ){inQ=false;continue;}
     if(c===','&&!inQ){res.push(cur.trim());cur='';continue;}
     cur+=c;
   }
-  res.push(cur.trim());return res;
+  res.push(cur.trim()); return res;
 }
 
-function excelDateToISO(raw){
-  // Excelシリアル値（数値）の場合
-  const n=parseFloat(raw);
+function parseRows(data){
+  // 列名を柔軟に検索（部分一致）
+  const sampleKeys = Object.keys(data[0]||{});
+  const findCol = name => sampleKeys.find(k=>String(k).includes(name))||null;
+
+  const colDate   = findCol('期間');
+  const colCat    = findCol('分類');
+  const colContent= findCol('内容');
+  const colJPY    = findCol('JPY');
+  const colType   = findCol('収入/支出');
+  const colMemo   = findCol('メモ');
+
+  if(!colJPY||!colType) throw new Error('必要な列が見つかりません');
+
+  const result=[];
+  data.forEach(row=>{
+    const type = String(row[colType]||'').trim();
+    if(type!=='支出'&&type!=='収入') return;
+
+    const rawDate = colDate ? String(row[colDate]||'') : '';
+    const date = parseAnyDate(rawDate);
+    if(!date) return;
+
+    const rawAmt = String(row[colJPY]||'0').replace(/[,\s]/g,'');
+    const amount = parseInt(rawAmt);
+    if(!amount||amount<=0) return;
+
+    const rawCat = colCat ? String(row[colCat]||'').trim() : '';
+    const category = CATS.includes(rawCat) ? rawCat : '雑費';
+    const shop = colContent ? String(row[colContent]||'').trim()||'不明' : '不明';
+    const memo = colMemo ? String(row[colMemo]||'').trim() : '';
+
+    result.push({date, amount, category, shop, memo, source:'csv', type});
+  });
+  if(!result.length) throw new Error('有効な行なし');
+  return result;
+}
+
+function parseAnyDate(raw){
+  const s = String(raw).trim();
+  // 日時形式 "2026-05-01 21:09:15" or "2026/05/01 21:09:15"
+  const mDT = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if(mDT) return `${mDT[1]}-${mDT[2].padStart(2,'0')}-${mDT[3].padStart(2,'0')}`;
+  // Excelシリアル値
+  const n = parseFloat(s);
   if(!isNaN(n)&&n>40000&&n<60000){
     const d=new Date(Math.round((n-25569)*86400*1000));
     return d.toISOString().slice(0,10);
   }
-  // YYYY/MM/DD or YYYY-MM-DD
-  const m=raw.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
   return null;
-}
-
-function parseCsv(text){
-  const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
-  if(lines.length<2) throw new Error('空ファイル');
-  const header=splitLine(lines[0]).map(c=>c.replace(/[""]/g,'').trim());
-  const ci=name=>header.findIndex(c=>c.includes(name));
-  const colDate=ci('期間'), colCat=ci('分類'), colContent=ci('内容');
-  const colJPY=ci('JPY'), colType=ci('収入/支出'), colMemo=ci('メモ');
-  if(colJPY===-1||colType===-1) throw new Error('列不足');
-  const result=[];
-  for(let i=1;i<lines.length;i++){
-    const cols=splitLine(lines[i]);
-    const type=(cols[colType]||'').replace(/[""]/g,'').trim();
-    if(type!=='支出'&&type!=='収入') continue;
-    const rawDate=(cols[colDate]||'').replace(/[""]/g,'').trim();
-    const date=excelDateToISO(rawDate);
-    if(!date) continue;
-    const amount=parseInt((cols[colJPY]||'0').replace(/[""',\s]/g,''));
-    if(!amount||amount<=0) continue;
-    const rawCat=(cols[colCat]||'').replace(/[""]/g,'').trim();
-    const category=CATS.includes(rawCat)?rawCat:'雑費';
-    const shop=(cols[colContent]||'').replace(/[""]/g,'').trim()||'不明';
-    const memo=colMemo>=0?(cols[colMemo]||'').replace(/[""]/g,'').trim():'';
-    result.push({date,amount,category,shop,memo,source:'csv',type});
-  }
-  if(!result.length) throw new Error('有効な行なし');
-  return result;
 }
 
 function showCsvPreview(rows){
