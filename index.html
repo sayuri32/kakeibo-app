@@ -230,6 +230,18 @@
   .badge-m   { background: rgba(240,100,200,0.15); color: var(--accent3); }
   .badge-c   { background: rgba(240,200,100,0.15); color: #f0c864; }
   .badge-rec { background: rgba(100,240,160,0.15); color: var(--green); }
+
+  /* Filter chips */
+  .fchip {
+    flex-shrink: 0; padding: 5px 12px;
+    background: var(--surface2); border: 1.5px solid var(--border);
+    border-radius: 99px; color: var(--muted);
+    font-family: var(--font); font-size: 11px; font-weight: 700;
+    cursor: pointer; touch-action: manipulation; white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .fchip.active { background: var(--accent); border-color: var(--accent); color: #0f0f13; }
+  .fchip:active { opacity: 0.75; }
   .tx-del {
     position: absolute; right: 12px; bottom: 10px;
     background: none; border: 1px solid var(--border); color: var(--red);
@@ -537,6 +549,10 @@
       <div class="sec-title" style="margin-bottom:0">今月の履歴</div>
       <div style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="txCountMobile"></div>
     </div>
+    <!-- カテゴリフィルター -->
+    <div id="catFilterWrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -16px 14px;padding:0 16px">
+      <div id="catFilterChips" style="display:flex;gap:6px;width:max-content;padding-bottom:4px"></div>
+    </div>
     <div id="txListMobile"></div>
   </div>
 
@@ -640,7 +656,7 @@ async function loadR()      { try { const r=await window.storage.get(RKEY); retu
 async function saveR(d)     { try { await window.storage.set(RKEY, JSON.stringify(d)); } catch(e){console.error(e);} }
 
 /* ── STATE ── */
-let DB={}, RECUR=[], cy, cm, pending=[], editRecurIdx=null;
+let DB={}, RECUR=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all';
 
 /* ── INIT ── */
 (async()=>{
@@ -724,10 +740,11 @@ function srcBadge(src){
   return `<span class="badge ${cls}">${ico}</span>`;
 }
 
-function txHTML(items){
-  if(!items.length) return `<div class="empty"><div class="empty-ico">🧾</div>まだデータがありません<br>レシートをアップするか<br>手動で追加してね</div>`;
-  return [...items].reverse().map((it,ri)=>{
-    const i=items.length-1-ri;
+function txHTML(filtered, allItems){
+  const items = allItems || filtered;
+  if(!filtered.length) return `<div class="empty"><div class="empty-ico">🔍</div>該当する履歴がないよ</div>`;
+  return [...filtered].reverse().map(it=>{
+    const i = items.indexOf(it);
     const isIncome = it.type==='収入';
     return `<div class="tx-item">
       <div class="tx-shop">${h(it.shop)}${srcBadge(it.source)}</div>
@@ -740,13 +757,37 @@ function txHTML(items){
 }
 
 function renderList(){
-  const items=cur(), cnt=`${items.length}件`, html=txHTML(items);
+  const items = cur();
+  const usedCats = [...new Set(items.map(i=>i.category))].sort();
+
+  // チップ生成
+  const chipWrap = document.getElementById('catFilterChips');
+  if(chipWrap){
+    chipWrap.innerHTML = ['all',...usedCats].map(cat=>`
+      <button class="fchip${activeCatFilter===cat?' active':''}" onclick="setCatFilter('${cat}')">
+        ${cat==='all'?'すべて':cat}
+      </button>`).join('');
+  }
+
+  // フィルター適用
+  const filtered = activeCatFilter==='all' ? items : items.filter(i=>i.category===activeCatFilter);
+  const totalFiltered = filtered.filter(i=>i.type!=='収入').reduce((s,i)=>s+i.amount,0);
+  const cnt = activeCatFilter==='all'
+    ? `${items.length}件`
+    : `${filtered.length}件 · ¥${totalFiltered.toLocaleString()}`;
+
+  const html = txHTML(filtered, items);
   const mob=document.getElementById('txListMobile');
   const dsk=document.getElementById('txListDesktop');
   const mobCnt=document.getElementById('txCountMobile');
   const dskCnt=document.getElementById('txCountDesktop');
   if(mob)mob.innerHTML=html; if(dsk)dsk.innerHTML=html;
   if(mobCnt)mobCnt.textContent=cnt; if(dskCnt)dskCnt.textContent=cnt;
+}
+
+function setCatFilter(cat){
+  activeCatFilter=cat;
+  renderList();
 }
 
 function renderDash(){
@@ -887,8 +928,8 @@ document.getElementById('recurModalSave').onclick=async()=>{
 };
 
 /* ── MONTH NAV ── */
-document.getElementById('prevMonth').onclick=async()=>{ if(cm===1){cy--;cm=12;}else cm--; await applyRecurring(); render(); };
-document.getElementById('nextMonth').onclick=async()=>{ if(cm===12){cy++;cm=1;}else cm++; await applyRecurring(); render(); };
+document.getElementById('prevMonth').onclick=async()=>{ if(cm===1){cy--;cm=12;}else cm--; activeCatFilter='all'; await applyRecurring(); render(); };
+document.getElementById('nextMonth').onclick=async()=>{ if(cm===12){cy++;cm=1;}else cm++; activeCatFilter='all'; await applyRecurring(); render(); };
 
 /* ── BOTTOM NAV ── */
 document.querySelectorAll('.bnav-btn').forEach(btn=>{
