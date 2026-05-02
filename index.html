@@ -650,10 +650,10 @@ const CATS      = ['食費','外食費','日用品','サブスク','交通/車',
 const COLORS    = ['#c8f064','#64c8f0','#f064c8','#f0c864','#64f0a0','#c864f0','#f09664','#64f0f0','#f06464','#a0c8f0','#f0a0c8','#c8a064'];
 
 /* ── STORAGE ── */
-async function load()       { try { const r=await window.storage.get(KEY);  return r?JSON.parse(r.value):{};  } catch{return {};} }
-async function save(d)      { try { await window.storage.set(KEY,  JSON.stringify(d)); } catch(e){console.error(e);} }
-async function loadR()      { try { const r=await window.storage.get(RKEY); return r?JSON.parse(r.value):[];  } catch{return [];} }
-async function saveR(d)     { try { await window.storage.set(RKEY, JSON.stringify(d)); } catch(e){console.error(e);} }
+async function load()   { try { const r=localStorage.getItem(KEY);  return r?JSON.parse(r):{};  } catch{return {};} }
+async function save(d)  { try { localStorage.setItem(KEY,  JSON.stringify(d)); } catch(e){console.error(e);} }
+async function loadR()  { try { const r=localStorage.getItem(RKEY); return r?JSON.parse(r):[];  } catch{return [];} }
+async function saveR(d) { try { localStorage.setItem(RKEY, JSON.stringify(d)); } catch(e){console.error(e);} }
 
 /* ── STATE ── */
 let DB={}, RECUR=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all';
