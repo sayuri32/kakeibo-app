@@ -44,6 +44,7 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 18px;
     padding-top: env(safe-area-inset-top, 0px);
+    height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
     border-bottom: 1px solid var(--border);
     background: var(--bg); z-index: 50; flex-shrink: 0;
   }
@@ -61,7 +62,7 @@
 
   /* ── SCROLL AREA ── */
   .scroll-area {
-    height: calc(100dvh - var(--header-h) - var(--nav-h) - var(--sab));
+    height: calc(100dvh - var(--header-h) - env(safe-area-inset-top, 0px) - var(--nav-h) - var(--sab));
     overflow-y: auto; overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
