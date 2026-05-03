@@ -566,7 +566,9 @@
       <div class="sec-title" style="margin-bottom:0">毎月の固定費</div>
       <button onclick="openRecurAdd()" style="background:var(--accent);border:none;color:#0f0f13;font-family:var(--font);font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;touch-action:manipulation">＋ 追加</button>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">月初に自動で追加されるよ。<br>アプリを開いた時に当月分が未登録なら自動でセットされます。</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.7">月初に自動で追加されるよ。<br>アプリを開いた時に当月分が未登録なら自動でセットされます。</div>
+    <button onclick="detectRecurring()" style="width:100%;padding:12px;background:var(--surface2);border:1.5px dashed var(--accent2);color:var(--accent2);font-family:var(--font);font-size:13px;font-weight:700;border-radius:12px;cursor:pointer;touch-action:manipulation;margin-bottom:16px">🔍 過去データから固定費を自動検出</button>
+    <div id="recurSuggestions"></div>
     <div id="recurList"></div>
   </div>
 
@@ -891,7 +893,86 @@ function renderDash(){
   }).join('');
 }
 
-/* ── RECURRING LIST ── */
+/* ── AUTO-DETECT RECURRING ── */
+function detectRecurring(){
+  // 全データから店名×金額の出現月を集計
+  const map = {}; // key: "shop__amount__category" → Set of month strings
+  Object.entries(DB).forEach(([monthKey, items]) => {
+    items.forEach(it => {
+      if(it.type === '収入') return;
+      if(it.source === 'recur') return; // 固定費由来は除外
+      const key = `${it.shop}__${it.amount}__${it.category}`;
+      if(!map[key]) map[key] = new Set();
+      map[key].add(monthKey);
+    });
+  });
+
+  // 2ヶ月以上出現しているものを候補に
+  const candidates = Object.entries(map)
+    .filter(([, months]) => months.size >= 2)
+    .map(([key, months]) => {
+      const [shop, amount, category] = key.split('__');
+      // すでに登録済みの固定費は除外
+      const alreadyRegistered = RECUR.some(r => r.shop === shop && r.amount === parseInt(amount));
+      return { shop, amount: parseInt(amount), category, months: months.size, alreadyRegistered };
+    })
+    .filter(c => !c.alreadyRegistered)
+    .sort((a, b) => b.months - a.months);
+
+  const el = document.getElementById('recurSuggestions');
+  if(!candidates.length){
+    el.innerHTML = `<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px;background:var(--surface);border-radius:10px;margin-bottom:12px">新しい候補は見つからなかったよ🔍<br>すでに全部登録済みか、まだデータが少ないかも</div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase">${candidates.length}件の候補が見つかったよ</div>
+    ${candidates.map((c, i) => `
+      <div style="background:var(--surface);border-radius:12px;padding:13px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700">${h(c.shop)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${h(c.category)} · ${c.months}ヶ月連続</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent);font-family:var(--mono);margin-right:8px">¥${c.amount.toLocaleString()}</div>
+        <button onclick="addSuggestion(${i})" style="background:var(--accent);border:none;color:#0f0f13;font-family:var(--font);font-size:11px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;touch-action:manipulation">追加</button>
+      </div>`).join('')}
+    <button onclick="addAllSuggestions()" style="width:100%;padding:12px;background:var(--surface2);border:1.5px solid var(--accent);color:var(--accent);font-family:var(--font);font-size:13px;font-weight:700;border-radius:12px;cursor:pointer;touch-action:manipulation;margin-bottom:16px">✅ すべて追加する</button>
+  `;
+
+  // candidatesをグローバルに保持
+  window._recurCandidates = candidates;
+}
+
+async function addSuggestion(i){
+  const c = window._recurCandidates[i];
+  if(!c) return;
+  // 引落日は1日をデフォルト
+  const entry = { id: Date.now()+Math.random(), shop: c.shop, amount: c.amount, day: 1, category: c.category, type: '支出', memo: '', active: true };
+  RECUR.push(entry);
+  await saveR(RECUR);
+  await applyRecurring();
+  // 候補から削除
+  window._recurCandidates.splice(i, 1);
+  detectRecurring(); // リスト更新
+  renderRecur();
+  toast(`「${c.shop}」を固定費に追加したよ！`, 'ok');
+}
+
+async function addAllSuggestions(){
+  const candidates = window._recurCandidates || [];
+  if(!candidates.length) return;
+  candidates.forEach(c => {
+    RECUR.push({ id: Date.now()+Math.random(), shop: c.shop, amount: c.amount, day: 1, category: c.category, type: '支出', memo: '', active: true });
+  });
+  await saveR(RECUR);
+  await applyRecurring();
+  window._recurCandidates = [];
+  document.getElementById('recurSuggestions').innerHTML = '';
+  renderRecur();
+  toast(`${candidates.length}件を固定費に追加したよ！`, 'ok');
+}
+
+
 function renderRecur(){
   const el=document.getElementById('recurList');
   if(!el) return;
