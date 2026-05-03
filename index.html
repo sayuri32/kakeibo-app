@@ -221,7 +221,7 @@
   .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   .tx-item {
     background: var(--surface); border-radius: 12px; margin-bottom: 8px;
-    padding: 13px 14px 36px;
+    padding: 13px 14px 42px;
     display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
     position: relative;
   }
@@ -787,12 +787,16 @@ function txHTML(filtered, allItems){
   return [...filtered].reverse().map(it=>{
     const i = items.indexOf(it);
     const isIncome = it.type==='収入';
+    const alreadyRecur = RECUR.some(r=>r.shop===it.shop&&r.amount===it.amount);
     return `<div class="tx-item">
       <div class="tx-shop">${h(it.shop)}${srcBadge(it.source)}</div>
       <div class="tx-amt" style="color:${isIncome?'var(--green)':'var(--accent)'}">${isIncome?'+':'-'}¥${it.amount.toLocaleString()}</div>
       <div class="tx-meta">${h(it.category)}${it.memo?' · '+h(it.memo):''}</div>
       <div class="tx-date-lbl">${it.date.slice(5).replace('-','/')}</div>
-      <button class="tx-del" onclick="del(${i})">削除</button>
+      <div style="position:absolute;right:12px;bottom:10px;display:flex;gap:6px">
+        ${!alreadyRecur&&!isIncome?`<button onclick="convertToRecur(${i})" style="background:none;border:1px solid var(--border);color:var(--green);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;touch-action:manipulation">🔄固定費</button>`:''}
+        <button class="tx-del" onclick="del(${i})" style="position:static">削除</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -893,7 +897,21 @@ function renderDash(){
   }).join('');
 }
 
-/* ── AUTO-DETECT RECURRING ── */
+/* ── CONVERT TX TO RECURRING ── */
+function convertToRecur(i){
+  const it = cur()[i];
+  if(!it) return;
+  // 固定費追加モーダルをその内容で開く
+  editRecurIdx = null;
+  document.getElementById('recurModalTitle').innerHTML = '固定費に登録 <em>🔄</em>';
+  document.getElementById('r-shop').value   = it.shop;
+  document.getElementById('r-amount').value = it.amount;
+  document.getElementById('r-day').value    = parseInt(it.date.slice(8)) || 1;
+  document.getElementById('r-cat').value    = it.category;
+  document.getElementById('r-type').value   = it.type || '支出';
+  document.getElementById('r-memo').value   = it.memo || '';
+  document.getElementById('recurModalBg').classList.add('on');
+}
 function detectRecurring(){
   // 全データから店名×金額の出現月を集計
   const map = {}; // key: "shop__amount__category" → Set of month strings
@@ -1345,6 +1363,16 @@ function toast(msg,type='ok'){
   document.getElementById('toastIcon').textContent=type==='ok'?'✓':'✕';
   el.className='toast show';
   setTimeout(()=>el.className='toast',3000);
+}
+
+/* ── PWA キャッシュ無効化 ── */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(reg=>reg.unregister());
+  });
+  caches.keys().then(keys=>{
+    keys.forEach(key=>caches.delete(key));
+  });
 }
 </script>
 
