@@ -614,6 +614,38 @@
   </div>
 </div>
 
+<!-- MODAL: TX EDIT -->
+<div class="modal-bg" id="txEditModalBg">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">明細を編集 <em>✏️</em></div>
+    <div class="fg"><label class="flabel">店名 / サービス名</label><input class="finput" id="te-shop" type="text" autocomplete="off"></div>
+    <div class="frow">
+      <div class="fg"><label class="flabel">金額（円）</label><input class="finput" id="te-amount" type="number" inputmode="numeric"></div>
+      <div class="fg"><label class="flabel">日付</label><input class="finput" id="te-date" type="date"></div>
+    </div>
+    <div class="fg"><label class="flabel">カテゴリ</label>
+      <select class="fselect" id="te-cat">
+        <option>食費</option><option>外食費</option><option>日用品</option><option>サブスク</option>
+        <option>交通/車</option><option>住居/通信</option><option>医療/美容</option><option>教育</option>
+        <option>服飾費</option><option>交遊費</option><option>保険</option><option>貯蓄</option><option>雑費</option>
+      </select>
+    </div>
+    <div class="fg"><label class="flabel">種別</label>
+      <select class="fselect" id="te-type"><option value="支出">支出</option><option value="収入">収入</option></select>
+    </div>
+    <div class="fg"><label class="flabel">メモ</label><input class="finput" id="te-memo" type="text" autocomplete="off"></div>
+    <!-- 固定費登録ボタン -->
+    <div id="te-recur-wrap" style="margin-top:4px;margin-bottom:4px">
+      <button id="te-recur-btn" onclick="convertToRecurFromEdit()" style="width:100%;padding:11px;background:var(--surface2);border:1.5px dashed var(--border);color:var(--green);font-family:var(--font);font-size:13px;font-weight:700;border-radius:12px;cursor:pointer;touch-action:manipulation">🔄 固定費として登録する</button>
+    </div>
+    <div class="sheet-actions">
+      <button class="sheet-cancel" id="txEditCancel">キャンセル</button>
+      <button class="sheet-save" id="txEditSave">保存する</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: DAY DETAIL -->
 <div class="modal-bg" id="dayModalBg">
   <div class="modal-sheet">
@@ -750,21 +782,18 @@ function srcBadge(src){
 function txHTML(filtered, allItems){
   const items=allItems||filtered;
   if(!filtered.length) return `<div class="empty"><div class="empty-ico">🔍</div>該当する履歴がないよ</div>`;
-  // 降順（新しい順）
   const sorted=[...filtered].sort((a,b)=>b.date.localeCompare(a.date));
   return sorted.map(it=>{
     const i=items.indexOf(it);
     const isIncome=it.type==='収入';
-    const alreadyRecur=RECUR.some(r=>r.shop===it.shop&&r.amount===it.amount);
     return `<div class="tx-item">
       <div class="tx-shop">${h(it.shop)}${srcBadge(it.source)}</div>
       <div class="tx-amt" style="color:${isIncome?'var(--green)':'var(--accent2)'}">${isIncome?'+':'-'}¥${it.amount.toLocaleString()}</div>
       <div class="tx-meta">${h(it.category)}${it.memo?' · '+h(it.memo):''}</div>
       <div class="tx-date-lbl">${it.date.slice(5).replace('-','/')}</div>
       <div style="position:absolute;right:12px;bottom:10px;display:flex;gap:6px">
-        ${!alreadyRecur&&!isIncome?`<button onclick="convertToRecur(${i})" style="background:none;border:1px solid var(--border);color:var(--green);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;touch-action:manipulation">🔄固定費</button>`:''}
-        ${it.source==='recur'?`<button onclick="editInstance(${i})" style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;touch-action:manipulation">編集</button>`:''}
-        <button onclick="del(${i})" style="background:none;border:1px solid var(--border);color:var(--accent2);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;touch-action:manipulation">削除</button>
+        <button onclick="editTx(${i})" style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">編集</button>
+        <button onclick="del(${i})" style="background:none;border:1px solid var(--border);color:var(--accent2);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">削除</button>
       </div>
     </div>`;
   }).join('');
@@ -945,6 +974,75 @@ document.getElementById('instanceSave').onclick=async()=>{
   document.getElementById('instanceModalBg').classList.remove('on');
   render();
   toast('この月分を更新したよ！','ok');
+};
+
+/* ── TX EDIT ── */
+let editTxIdx = null;
+
+function editTx(i){
+  editTxIdx = i;
+  const it = cur()[i];
+  if(!it) return;
+
+  document.getElementById('te-shop').value   = it.shop;
+  document.getElementById('te-amount').value = it.amount;
+  document.getElementById('te-date').value   = it.date;
+  document.getElementById('te-cat').value    = it.category;
+  document.getElementById('te-type').value   = it.type || '支出';
+  document.getElementById('te-memo').value   = it.memo || '';
+
+  // 固定費ボタン：すでに登録済みなら非表示
+  const alreadyRecur = RECUR.some(r=>r.shop===it.shop&&r.amount===it.amount);
+  const isIncome = it.type === '収入';
+  document.getElementById('te-recur-wrap').style.display = (alreadyRecur||isIncome) ? 'none' : 'block';
+
+  document.getElementById('txEditModalBg').classList.add('on');
+}
+
+function convertToRecurFromEdit(){
+  // 編集中の内容を読んで固定費モーダルへ引き渡し
+  const shop   = document.getElementById('te-shop').value.trim();
+  const amount = parseInt(document.getElementById('te-amount').value);
+  const date   = document.getElementById('te-date').value;
+  const cat    = document.getElementById('te-cat').value;
+  const type   = document.getElementById('te-type').value;
+  const memo   = document.getElementById('te-memo').value.trim();
+
+  // 先に編集モーダルを閉じる
+  document.getElementById('txEditModalBg').classList.remove('on');
+
+  // 固定費モーダルを開く
+  editRecurIdx = null;
+  document.getElementById('recurModalTitle').innerHTML = '固定費に登録 <em>🔄</em>';
+  document.getElementById('r-shop').value   = shop;
+  document.getElementById('r-amount').value = amount;
+  document.getElementById('r-day').value    = parseInt(date.slice(8)) || 1;
+  document.getElementById('r-cat').value    = cat;
+  document.getElementById('r-type').value   = type;
+  document.getElementById('r-memo').value   = memo;
+  document.getElementById('recurModalBg').classList.add('on');
+}
+
+document.getElementById('txEditCancel').onclick = ()=>document.getElementById('txEditModalBg').classList.remove('on');
+document.getElementById('txEditModalBg').onclick = e=>{if(e.target===document.getElementById('txEditModalBg'))document.getElementById('txEditModalBg').classList.remove('on');};
+
+document.getElementById('txEditSave').onclick = async()=>{
+  if(editTxIdx===null) return;
+  const key = mkey(cy,cm);
+  const shop   = document.getElementById('te-shop').value.trim();
+  const amount = parseInt(document.getElementById('te-amount').value);
+  const date   = document.getElementById('te-date').value;
+  const cat    = document.getElementById('te-cat').value;
+  const type   = document.getElementById('te-type').value;
+  const memo   = document.getElementById('te-memo').value.trim();
+  if(!shop){toast('店名を入力してね','err');return;}
+  if(!amount||amount<=0){toast('金額を入力してね','err');return;}
+  if(!date){toast('日付を選んでね','err');return;}
+  DB[key][editTxIdx] = {...DB[key][editTxIdx], shop, amount, date, category:cat, type, memo};
+  await save(DB);
+  document.getElementById('txEditModalBg').classList.remove('on');
+  render();
+  toast('更新したよ！','ok');
 };
 
 /* ── CONVERT TX TO RECURRING ── */
