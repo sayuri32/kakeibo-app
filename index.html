@@ -651,36 +651,23 @@ const COLORS    = ['#c8f064','#64c8f0','#f064c8','#f0c864','#64f0a0','#c864f0','
 
 /* ── STORAGE (Xserver API sync) ── */
 const API = 'https://happylife32.com/kakeibo/api.php';
+let _cache = null; // メモリキャッシュ（競合防止）
 
-async function load() {
-  try {
-    const r = await fetch(API); 
-    const d = await r.json();
-    return d.db || {};
-  } catch { return {}; }
-}
-async function save(d) {
-  try {
-    const cur = await fetchAll();
-    await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...cur, db: d}) });
-  } catch(e) { console.error(e); }
-}
-async function loadR() {
-  try {
-    const r = await fetch(API);
-    const d = await r.json();
-    return d.recur || [];
-  } catch { return []; }
-}
-async function saveR(d) {
-  try {
-    const cur = await fetchAll();
-    await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...cur, recur: d}) });
-  } catch(e) { console.error(e); }
-}
 async function fetchAll() {
-  try { const r = await fetch(API); return await r.json(); } catch { return {}; }
+  if(_cache) return _cache;
+  try { const r=await fetch(API+'?t='+Date.now()); _cache=await r.json(); return _cache; }
+  catch { _cache={}; return {}; }
 }
+async function pushAll(data) {
+  _cache = data;
+  try {
+    await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+  } catch(e) { console.error(e); }
+}
+async function load()   { const d=await fetchAll(); return d.db||{}; }
+async function save(d)  { const all=await fetchAll(); await pushAll({...all, db:d}); }
+async function loadR()  { const d=await fetchAll(); return d.recur||[]; }
+async function saveR(d) { const all=await fetchAll(); await pushAll({...all, recur:d}); }
 
 /* ── STATE ── */
 let DB={}, RECUR=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all';
@@ -1237,10 +1224,10 @@ document.getElementById('csvCancelBtn').onclick=()=>{
 };
 
 document.getElementById('csvImportBtn').onclick=async()=>{
+  const btn = document.getElementById('csvImportBtn');
+  btn.disabled=true; btn.textContent='保存中...';
   let added=0;
   csvParsed.forEach(r=>{
-    const key=r.date.slice(0,7).replace('-','-');
-    // mkey形式に揃える
     const [y,m]=r.date.slice(0,7).split('-');
     const k=mkey(parseInt(y),parseInt(m));
     if(!DB[k])DB[k]=[];
@@ -1252,6 +1239,7 @@ document.getElementById('csvImportBtn').onclick=async()=>{
   document.getElementById('csvPreview').style.display='none';
   document.getElementById('csvDropZone').style.display='block';
   csvFi.value='';
+  btn.disabled=false; btn.textContent='まとめてインポートする';
   render();
   toast(`${added}件をインポートしたよ！`,'ok');
 };
