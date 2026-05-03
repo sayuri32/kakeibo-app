@@ -1144,8 +1144,7 @@ function _openTxEditModal(it){
   document.getElementById('te-type').value   = it.type || '支出';
   document.getElementById('te-memo').value   = it.memo || '';
   const alreadyRecur = RECUR.some(r=>r.shop===it.shop&&r.amount===it.amount);
-  const isIncome = it.type === '収入';
-  document.getElementById('te-recur-wrap').style.display = (alreadyRecur||isIncome) ? 'none' : 'block';
+  document.getElementById('te-recur-wrap').style.display = alreadyRecur ? 'none' : 'block';
   document.getElementById('txEditModalBg').classList.add('on');
 }
 
