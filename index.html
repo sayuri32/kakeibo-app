@@ -585,6 +585,15 @@
       <select class="fselect" id="r-type"><option value="支出">支出</option><option value="収入">収入</option></select>
     </div>
     <div class="fg"><label class="flabel">メモ（任意）</label><input class="finput" id="r-memo" type="text" placeholder="例：家族プラン" autocomplete="off"></div>
+    <div class="fg" id="r-applyfrom-wrap">
+      <label class="flabel">適用開始月</label>
+      <select class="fselect" id="r-applyfrom">
+        <option value="now">今月から</option>
+        <option value="next">来月から</option>
+        <option value="custom">指定月から</option>
+      </select>
+      <input class="finput" id="r-applyfrom-custom" type="month" style="display:none;margin-top:8px">
+    </div>
     <div class="sheet-actions">
       <button class="sheet-cancel" id="recurModalCancel">キャンセル</button>
       <button class="sheet-save" id="recurModalSave">保存する</button>
@@ -726,6 +735,9 @@ async function applyRecurring(){
   let changed=false;
   RECUR.forEach(r=>{
     if(!r.active) return;
+    // 適用開始月チェック
+    const sy=r.startYear||2000, sm=r.startMonth||1;
+    if(cy<sy||(cy===sy&&cm<sm)) return; // まだ開始月前
     const day=Math.min(r.day, new Date(cy,cm,0).getDate());
     const date=`${cy}-${String(cm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     if(!DB[mkey(cy,cm)]) DB[mkey(cy,cm)]=[];
@@ -744,6 +756,8 @@ function initDesktop(){
   const sa=document.getElementById('scrollArea');
   sa.style.height='auto'; sa.style.overflow='visible';
   const wrap=document.createElement('div'); wrap.className='desktop-wrap';
+
+  // ── 左カラム: 追加 + 履歴 ──
   const left=document.createElement('div'); left.className='desktop-left';
   const addWrap=document.createElement('div'); addWrap.className='desktop-add';
   const addScreen=document.getElementById('screen-add');
@@ -757,13 +771,45 @@ function initDesktop(){
   dChipWrap.innerHTML=`<div id="catFilterChipsDesktop" style="display:flex;gap:6px;width:max-content"></div>`;
   const dList=document.createElement('div'); dList.id='txListDesktop';
   histWrap.appendChild(dHead); histWrap.appendChild(dChipWrap); histWrap.appendChild(dList); left.appendChild(histWrap);
+
+  // ── 右カラム: ダッシュボード + タブ(固定費) ──
   const right=document.createElement('div'); right.className='desktop-right';
+
+  // 右カラムのタブ
+  const rtabs=document.createElement('div');
+  rtabs.style.cssText='display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;';
+  rtabs.innerHTML=`
+    <button class="desktop-rtab active" data-rtab="dash" onclick="switchRTab('dash')" style="padding:12px 20px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">📊 ダッシュボード</button>
+    <button class="desktop-rtab" data-rtab="recur" onclick="switchRTab('recur')" style="padding:12px 20px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">🔄 固定費</button>`;
+  right.appendChild(rtabs);
+
+  // ダッシュボード
+  const dashPanel=document.createElement('div'); dashPanel.id='desktop-dash-panel';
   const dash=document.getElementById('screen-dash');
   dash.style.cssText='display:block!important;padding:0;';
-  right.appendChild(dash);
-  ['screen-hist','screen-recur'].forEach(id=>{const el=document.getElementById(id);if(el)el.remove();});
+  dashPanel.appendChild(dash); right.appendChild(dashPanel);
+
+  // 固定費パネル
+  const recurPanel=document.createElement('div'); recurPanel.id='desktop-recur-panel'; recurPanel.style.display='none';
+  const recurScreen=document.getElementById('screen-recur');
+  if(recurScreen){ recurScreen.style.cssText='display:block!important;'; recurPanel.appendChild(recurScreen); }
+  right.appendChild(recurPanel);
+
+  ['screen-hist'].forEach(id=>{const el=document.getElementById(id);if(el)el.remove();});
   wrap.appendChild(left); wrap.appendChild(right);
   sa.innerHTML=''; sa.appendChild(wrap);
+}
+
+function switchRTab(tab){
+  document.querySelectorAll('.desktop-rtab').forEach(b=>{
+    const isActive=b.dataset.rtab===tab;
+    b.style.borderBottom=isActive?'2px solid var(--accent)':'2px solid transparent';
+    b.style.color=isActive?'var(--accent)':'var(--muted)';
+  });
+  const dp=document.getElementById('desktop-dash-panel');
+  const rp=document.getElementById('desktop-recur-panel');
+  if(dp) dp.style.display=tab==='dash'?'block':'none';
+  if(rp) rp.style.display=tab==='recur'?'block':'none';
 }
 
 /* ── RENDER ── */
@@ -913,6 +959,9 @@ function openRecurAdd(){
   document.getElementById('r-day').value='1';
   document.getElementById('r-cat').value='サブスク';
   document.getElementById('r-type').value='支出';
+  document.getElementById('r-applyfrom').value='now';
+  document.getElementById('r-applyfrom-custom').style.display='none';
+  document.getElementById('r-applyfrom-wrap').style.display='block';
   document.getElementById('recurModalBg').classList.add('on');
 }
 function editRecur(i){
@@ -924,10 +973,18 @@ function editRecur(i){
   document.getElementById('r-cat').value=r.category;
   document.getElementById('r-type').value=r.type||'支出';
   document.getElementById('r-memo').value=r.memo||'';
+  document.getElementById('r-applyfrom').value='now';
+  document.getElementById('r-applyfrom-custom').style.display='none';
+  document.getElementById('r-applyfrom-wrap').style.display='block';
   document.getElementById('recurModalBg').classList.add('on');
 }
 async function toggleRecur(i){RECUR[i].active=!RECUR[i].active;await saveR(RECUR);renderRecur();toast(RECUR[i].active?'再開したよ！':'停止しました','ok');}
 async function delRecur(i){RECUR.splice(i,1);await saveR(RECUR);renderRecur();toast('削除しました','ok');}
+
+document.getElementById('r-applyfrom').onchange=()=>{
+  const v=document.getElementById('r-applyfrom').value;
+  document.getElementById('r-applyfrom-custom').style.display=v==='custom'?'block':'none';
+};
 
 document.getElementById('recurModalCancel').onclick=()=>document.getElementById('recurModalBg').classList.remove('on');
 document.getElementById('recurModalBg').onclick=e=>{if(e.target===document.getElementById('recurModalBg'))document.getElementById('recurModalBg').classList.remove('on');};
@@ -938,15 +995,35 @@ document.getElementById('recurModalSave').onclick=async()=>{
   const cat=document.getElementById('r-cat').value;
   const type=document.getElementById('r-type').value;
   const memo=document.getElementById('r-memo').value.trim();
+  const applyFrom=document.getElementById('r-applyfrom').value;
   if(!shop){toast('店名を入力してね','err');return;}
   if(!amount||amount<=0){toast('金額を入力してね','err');return;}
-  const entry={id:editRecurIdx!==null?RECUR[editRecurIdx].id:Date.now(),shop,amount,day,category:cat,type,memo,active:true};
+
+  // 適用開始月を決定
+  let startY=cy, startM=cm;
+  if(applyFrom==='next'){
+    if(cm===12){startY=cy+1;startM=1;}else{startM=cm+1;}
+  } else if(applyFrom==='custom'){
+    const v=document.getElementById('r-applyfrom-custom').value;
+    if(v){ const [y,m]=v.split('-'); startY=parseInt(y); startM=parseInt(m); }
+  }
+
+  const entry={
+    id:editRecurIdx!==null?RECUR[editRecurIdx].id:Date.now(),
+    shop,amount,day,category:cat,type,memo,active:true,
+    startYear:startY, startMonth:startM
+  };
   if(editRecurIdx!==null)RECUR[editRecurIdx]=entry; else RECUR.push(entry);
   await saveR(RECUR);
   document.getElementById('recurModalBg').classList.remove('on');
-  await applyRecurring(); await save(DB);
+
+  // 適用開始月が現在月以前なら即適用
+  if(startY<cy||(startY===cy&&startM<=cm)){
+    await applyRecurring(); await save(DB);
+  }
   render();
-  toast(`「${shop}」を登録したよ！`,'ok');
+  const startLabel=applyFrom==='now'?'今月':applyFrom==='next'?'来月':`${startY}年${startM}月`;
+  toast(`「${shop}」を${startLabel}から登録したよ！`,'ok');
 };
 
 /* ── INSTANCE EDIT (その月だけ) ── */
@@ -976,42 +1053,47 @@ document.getElementById('instanceSave').onclick=async()=>{
   toast('この月分を更新したよ！','ok');
 };
 
-/* ── TX EDIT ── */
-let editTxIdx = null;
+/* ── TX EDIT (IDベース) ── */
+let editTxId = null;
 
 function editTx(i){
-  editTxIdx = i;
   const it = cur()[i];
   if(!it) return;
+  editTxId = it.id;
+  _openTxEditModal(it);
+}
 
+function editTxById(id){
+  // 日別詳細モーダルから呼ぶ用
+  const items = cur();
+  const it = items.find(x=>x.id===id);
+  if(!it) return;
+  editTxId = id;
+  document.getElementById('dayModalBg').classList.remove('on');
+  _openTxEditModal(it);
+}
+
+function _openTxEditModal(it){
   document.getElementById('te-shop').value   = it.shop;
   document.getElementById('te-amount').value = it.amount;
   document.getElementById('te-date').value   = it.date;
   document.getElementById('te-cat').value    = it.category;
   document.getElementById('te-type').value   = it.type || '支出';
   document.getElementById('te-memo').value   = it.memo || '';
-
-  // 固定費ボタン：すでに登録済みなら非表示
   const alreadyRecur = RECUR.some(r=>r.shop===it.shop&&r.amount===it.amount);
   const isIncome = it.type === '収入';
   document.getElementById('te-recur-wrap').style.display = (alreadyRecur||isIncome) ? 'none' : 'block';
-
   document.getElementById('txEditModalBg').classList.add('on');
 }
 
 function convertToRecurFromEdit(){
-  // 編集中の内容を読んで固定費モーダルへ引き渡し
   const shop   = document.getElementById('te-shop').value.trim();
   const amount = parseInt(document.getElementById('te-amount').value);
   const date   = document.getElementById('te-date').value;
   const cat    = document.getElementById('te-cat').value;
   const type   = document.getElementById('te-type').value;
   const memo   = document.getElementById('te-memo').value.trim();
-
-  // 先に編集モーダルを閉じる
   document.getElementById('txEditModalBg').classList.remove('on');
-
-  // 固定費モーダルを開く
   editRecurIdx = null;
   document.getElementById('recurModalTitle').innerHTML = '固定費に登録 <em>🔄</em>';
   document.getElementById('r-shop').value   = shop;
@@ -1027,8 +1109,10 @@ document.getElementById('txEditCancel').onclick = ()=>document.getElementById('t
 document.getElementById('txEditModalBg').onclick = e=>{if(e.target===document.getElementById('txEditModalBg'))document.getElementById('txEditModalBg').classList.remove('on');};
 
 document.getElementById('txEditSave').onclick = async()=>{
-  if(editTxIdx===null) return;
+  if(!editTxId) return;
   const key = mkey(cy,cm);
+  const idx = DB[key]?.findIndex(x=>x.id===editTxId);
+  if(idx===-1||idx===undefined) return;
   const shop   = document.getElementById('te-shop').value.trim();
   const amount = parseInt(document.getElementById('te-amount').value);
   const date   = document.getElementById('te-date').value;
@@ -1038,7 +1122,7 @@ document.getElementById('txEditSave').onclick = async()=>{
   if(!shop){toast('店名を入力してね','err');return;}
   if(!amount||amount<=0){toast('金額を入力してね','err');return;}
   if(!date){toast('日付を選んでね','err');return;}
-  DB[key][editTxIdx] = {...DB[key][editTxIdx], shop, amount, date, category:cat, type, memo};
+  DB[key][idx] = {...DB[key][idx], shop, amount, date, category:cat, type, memo};
   await save(DB);
   document.getElementById('txEditModalBg').classList.remove('on');
   render();
@@ -1164,14 +1248,15 @@ function renderCalendar(expenses){
 }
 
 function openDayDetail(ds){
-  const items = cur().filter(it=>it.date.slice(8)===ds && it.type!=='収入');
   const allItems = cur().filter(it=>it.date.slice(8)===ds);
-  const total = items.reduce((s,i)=>s+i.amount,0);
-  const income = allItems.filter(i=>i.type==='収入').reduce((s,i)=>s+i.amount,0);
+  const expenses = allItems.filter(i=>i.type!=='収入');
+  const income   = allItems.filter(i=>i.type==='収入');
+  const total    = expenses.reduce((s,i)=>s+i.amount,0);
+  const totalInc = income.reduce((s,i)=>s+i.amount,0);
 
   document.getElementById('dayModalTitle').textContent = `${cy}年${cm}月${parseInt(ds)}日`;
   let subText = `支出 ¥${total.toLocaleString()}`;
-  if(income>0) subText += ` / 収入 ¥${income.toLocaleString()}`;
+  if(totalInc>0) subText += ` / 収入 ¥${totalInc.toLocaleString()}`;
   document.getElementById('dayModalTotal').textContent = subText;
 
   const sorted = [...allItems].sort((a,b)=>a.type==='収入'?1:-1);
@@ -1179,11 +1264,14 @@ function openDayDetail(ds){
     ? sorted.map(it=>{
         const isIncome = it.type==='収入';
         return `<div class="day-tx-item">
-          <div class="day-tx-left">
+          <div class="day-tx-left" style="flex:1">
             <div class="name">${h(it.shop)}</div>
             <div class="meta">${h(it.category)}${it.memo?' · '+h(it.memo):''}</div>
           </div>
-          <div class="day-tx-amt" style="color:${isIncome?'var(--green)':'var(--accent2)'}">${isIncome?'+':'-'}¥${it.amount.toLocaleString()}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="day-tx-amt" style="color:${isIncome?'var(--green)':'var(--accent2)'}">${isIncome?'+':'-'}¥${it.amount.toLocaleString()}</div>
+            <button onclick="editTxById('${it.id}')" style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;touch-action:manipulation;flex-shrink:0">編集</button>
+          </div>
         </div>`;
       }).join('')
     : '<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px">データなし</div>';
