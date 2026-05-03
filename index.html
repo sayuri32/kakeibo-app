@@ -384,6 +384,22 @@
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,#ffe0ec,#ffd6f0,#e8d6f8);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px">
+  <div style="font-size:48px;margin-bottom:12px">🏠</div>
+  <div style="font-size:28px;font-weight:900;color:#e8639a;margin-bottom:6px">かけいぼ</div>
+  <div style="font-size:13px;color:#b08898;margin-bottom:36px">家族の家計管理アプリ</div>
+  <div style="background:white;border-radius:20px;padding:28px 24px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(232,99,154,0.15)">
+    <div style="font-size:14px;font-weight:700;color:#3d2035;margin-bottom:16px">ログイン</div>
+    <input id="loginPassword" type="password" placeholder="パスワードを入力" class="finput" style="margin-bottom:12px"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="loginError" style="font-size:12px;color:#e85555;margin-bottom:10px;display:none">パスワードが違います</div>
+    <button onclick="doLogin()" style="width:100%;padding:14px;background:linear-gradient(135deg,#e8639a,#d45490);border:none;border-radius:12px;color:white;font-family:var(--font);font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(232,99,154,0.3)">
+      ログイン
+    </button>
+  </div>
+</div>
+
 <header>
   <div class="logo">かけいぼ</div>
   <div class="header-right">
@@ -678,18 +694,49 @@ const RKEY   = 'kakeibo_recur';
 const CATS   = ['食費','外食費','日用品','サブスク','交通/車','住居/通信','医療/美容','教育','服飾費','交遊費','保険','貯蓄','雑費'];
 const COLORS = ['#f4a7c0','#b8a9e8','#a8d8b0','#f9c784','#a8c8f0','#f4b8a0','#c8a8e8','#a8e0d8','#f4a0b8','#d4b8a8','#b8d8a8','#f0c8a0'];
 
+/* ── AUTH ── */
+const TOKEN_KEY = 'kakeibo_token';
+function getToken(){ return localStorage.getItem(TOKEN_KEY)||''; }
+function setToken(t){ localStorage.setItem(TOKEN_KEY,t); }
+function clearToken(){ localStorage.removeItem(TOKEN_KEY); }
+
+async function doLogin(){
+  const pw=document.getElementById('loginPassword').value;
+  const err=document.getElementById('loginError');
+  err.style.display='none';
+  try{
+    const res=await fetch(API+'?action=login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    const data=await res.json();
+    if(data.token){
+      setToken(data.token);
+      document.getElementById('loginScreen').style.display='none';
+      await initApp();
+    } else { err.style.display='block'; }
+  } catch { err.style.display='block'; }
+}
+
+function showLogin(){
+  _cache=null; clearToken();
+  document.getElementById('loginScreen').style.display='flex';
+}
+
 /* ── STORAGE ── */
 const API = 'https://happylife32.com/kakeibo/api.php';
 let _cache = null;
 
+function authHeaders(){ return {'Content-Type':'application/json','X-Auth-Token':getToken()}; }
+
 async function fetchAll() {
   if(_cache) return _cache;
-  try { const r=await fetch(API+'?t='+Date.now()); _cache=await r.json(); return _cache; }
-  catch { _cache={}; return {}; }
+  try {
+    const r=await fetch(API+'?t='+Date.now(),{headers:{'X-Auth-Token':getToken()}});
+    if(r.status===401){ showLogin(); return {}; }
+    _cache=await r.json(); return _cache;
+  } catch { _cache={}; return {}; }
 }
 async function pushAll(data) {
   _cache=data;
-  try { await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); }
+  try { await fetch(API,{method:'POST',headers:authHeaders(),body:JSON.stringify(data)}); }
   catch(e){console.error(e);}
 }
 async function load()   { const d=await fetchAll(); return d.db||{}; }
@@ -701,7 +748,7 @@ async function saveR(d) { const a=await fetchAll(); await pushAll({...a,recur:d}
 let DB={}, RECUR=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
 
 /* ── INIT ── */
-(async()=>{
+async function initApp(){
   document.getElementById('totalAmt').textContent='読込中...';
   DB=await load(); RECUR=await loadR();
   const now=new Date();
@@ -710,6 +757,22 @@ let DB={}, RECUR=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all
   await applyRecurring();
   initDesktop();
   render();
+}
+
+// 起動時：トークンあれば即アプリ、なければログイン画面
+(async()=>{
+  if(getToken()){
+    // トークン有効性確認
+    const r = await fetch(API+'?t='+Date.now(),{headers:{'X-Auth-Token':getToken()}});
+    if(r.status===401){
+      showLogin();
+    } else {
+      document.getElementById('loginScreen').style.display='none';
+      await initApp();
+    }
+  } else {
+    showLogin();
+  }
 })();
 
 function mkey(y,m){return `${y}-${String(m).padStart(2,'0')}`;}
@@ -1064,11 +1127,11 @@ function editTx(i){
 }
 
 function editTxById(id){
-  // 日別詳細モーダルから呼ぶ用
   const items = cur();
-  const it = items.find(x=>x.id===id);
+  // IDは数値の場合も文字列の場合もあるので両方対応
+  const it = items.find(x=>String(x.id)===String(id));
   if(!it) return;
-  editTxId = id;
+  editTxId = it.id;
   document.getElementById('dayModalBg').classList.remove('on');
   _openTxEditModal(it);
 }
@@ -1111,7 +1174,7 @@ document.getElementById('txEditModalBg').onclick = e=>{if(e.target===document.ge
 document.getElementById('txEditSave').onclick = async()=>{
   if(!editTxId) return;
   const key = mkey(cy,cm);
-  const idx = DB[key]?.findIndex(x=>x.id===editTxId);
+  const idx = DB[key]?.findIndex(x=>String(x.id)===String(editTxId));
   if(idx===-1||idx===undefined) return;
   const shop   = document.getElementById('te-shop').value.trim();
   const amount = parseInt(document.getElementById('te-amount').value);
@@ -1329,7 +1392,7 @@ document.getElementById('analyzeBtn').onclick=async()=>{
   try{
     const today=new Date().toISOString().slice(0,10);
     const res=await fetch('https://happylife32.com/kakeibo/api.php?action=analyze',{
-      method:'POST',headers:{'Content-Type':'application/json'},
+      method:'POST',headers:authHeaders(),
       body:JSON.stringify({messages:[{role:'user',content:[
         {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
         {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":数値}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\nJSONのみ。`}
