@@ -649,23 +649,52 @@ const RKEY      = 'kakeibo_recur';
 const CATS      = ['食費','外食費','日用品','サブスク','交通/車','住居/通信','医療/美容','教育','服飾費','交遊費','保険','貯蓄','雑費'];
 const COLORS    = ['#c8f064','#64c8f0','#f064c8','#f0c864','#64f0a0','#c864f0','#f09664','#64f0f0','#f06464','#a0c8f0','#f0a0c8','#c8a064'];
 
-/* ── STORAGE ── */
-async function load()   { try { const r=localStorage.getItem(KEY);  return r?JSON.parse(r):{};  } catch{return {};} }
-async function save(d)  { try { localStorage.setItem(KEY,  JSON.stringify(d)); } catch(e){console.error(e);} }
-async function loadR()  { try { const r=localStorage.getItem(RKEY); return r?JSON.parse(r):[];  } catch{return [];} }
-async function saveR(d) { try { localStorage.setItem(RKEY, JSON.stringify(d)); } catch(e){console.error(e);} }
+/* ── STORAGE (Xserver API sync) ── */
+const API = 'https://happylife32.com/kakeibo/api.php';
+
+async function load() {
+  try {
+    const r = await fetch(API); 
+    const d = await r.json();
+    return d.db || {};
+  } catch { return {}; }
+}
+async function save(d) {
+  try {
+    const cur = await fetchAll();
+    await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...cur, db: d}) });
+  } catch(e) { console.error(e); }
+}
+async function loadR() {
+  try {
+    const r = await fetch(API);
+    const d = await r.json();
+    return d.recur || [];
+  } catch { return []; }
+}
+async function saveR(d) {
+  try {
+    const cur = await fetchAll();
+    await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({...cur, recur: d}) });
+  } catch(e) { console.error(e); }
+}
+async function fetchAll() {
+  try { const r = await fetch(API); return await r.json(); } catch { return {}; }
+}
 
 /* ── STATE ── */
 let DB={}, RECUR=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all';
 
 /* ── INIT ── */
 (async()=>{
+  // ローディング表示
+  document.getElementById('totalAmt').textContent = '読込中...';
   DB    = await load();
   RECUR = await loadR();
   const now = new Date();
   cy = now.getFullYear(); cm = now.getMonth()+1;
   document.getElementById('m-date').value = now.toISOString().slice(0,10);
-  await applyRecurring(); // 当月の固定費を自動追加
+  await applyRecurring();
   initDesktop();
   render();
 })();
@@ -708,19 +737,36 @@ function initDesktop(){
   sa.style.height='auto'; sa.style.overflow='visible';
   const wrap=document.createElement('div'); wrap.className='desktop-wrap';
   const left=document.createElement('div'); left.className='desktop-left';
+
+  // Add section
   const addWrap=document.createElement('div'); addWrap.className='desktop-add';
   const addScreen=document.getElementById('screen-add');
   addScreen.style.cssText='display:block!important;padding:0;';
   addWrap.appendChild(addScreen); left.appendChild(addWrap);
+
+  // History section with filter chips
   const histWrap=document.createElement('div'); histWrap.className='desktop-hist';
+
+  // Header row
   const dHead=document.createElement('div'); dHead.className='desktop-hist-head';
   dHead.innerHTML=`<div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase">今月の履歴</div><span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="txCountDesktop"></span>`;
+  histWrap.appendChild(dHead);
+
+  // Filter chips row (desktop)
+  const dChipWrap=document.createElement('div');
+  dChipWrap.style.cssText='overflow-x:auto;border-bottom:1px solid var(--border);padding:8px 20px;';
+  dChipWrap.innerHTML=`<div id="catFilterChipsDesktop" style="display:flex;gap:6px;width:max-content"></div>`;
+  histWrap.appendChild(dChipWrap);
+
   const dList=document.createElement('div'); dList.id='txListDesktop';
-  histWrap.appendChild(dHead); histWrap.appendChild(dList); left.appendChild(histWrap);
+  histWrap.appendChild(dList); left.appendChild(histWrap);
+
+  // Right col
   const right=document.createElement('div'); right.className='desktop-right';
   const dash=document.getElementById('screen-dash');
   dash.style.cssText='display:block!important;padding:0;';
   right.appendChild(dash);
+
   document.getElementById('screen-hist').remove();
   document.getElementById('screen-recur').remove();
   wrap.appendChild(left); wrap.appendChild(right);
@@ -759,15 +805,17 @@ function txHTML(filtered, allItems){
 function renderList(){
   const items = cur();
   const usedCats = [...new Set(items.map(i=>i.category))].sort();
+  const chipsHTML = ['all',...usedCats].map(cat=>`
+    <button class="fchip${activeCatFilter===cat?' active':''}" onclick="setCatFilter('${cat}')">
+      ${cat==='all'?'すべて':cat}
+    </button>`).join('');
 
-  // チップ生成
-  const chipWrap = document.getElementById('catFilterChips');
-  if(chipWrap){
-    chipWrap.innerHTML = ['all',...usedCats].map(cat=>`
-      <button class="fchip${activeCatFilter===cat?' active':''}" onclick="setCatFilter('${cat}')">
-        ${cat==='all'?'すべて':cat}
-      </button>`).join('');
-  }
+  // モバイル用チップ
+  const chipMob = document.getElementById('catFilterChips');
+  if(chipMob) chipMob.innerHTML = chipsHTML;
+  // デスクトップ用チップ
+  const chipDsk = document.getElementById('catFilterChipsDesktop');
+  if(chipDsk) chipDsk.innerHTML = chipsHTML;
 
   // フィルター適用
   const filtered = activeCatFilter==='all' ? items : items.filter(i=>i.category===activeCatFilter);
