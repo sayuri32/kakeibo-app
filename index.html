@@ -8,8 +8,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="かけいぼ">
 <meta name="theme-color" content="#0f0f13">
-<link rel="apple-touch-icon" href="https://happylife32.com/kakeibo/icon.png?v=3">
-<link rel="icon" href="https://happylife32.com/kakeibo/icon.png?v=3">
+<link rel="apple-touch-icon" href="https://happylife32.com/kakeibo/icon.png">
+<link rel="icon" href="https://happylife32.com/kakeibo/icon.png">
 <title>かけいぼ</title>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -560,17 +560,17 @@
     <div id="txListMobile"></div>
   </div>
 
-</div><!-- /scroll-area -->
-
-<!-- SCREEN: RECURRING -->
-<div class="screen" id="screen-recur" style="display:none">
-  <div class="hist-header">
-    <div class="sec-title" style="margin-bottom:0">毎月の固定費</div>
-    <button onclick="openRecurAdd()" style="background:var(--accent);border:none;color:#0f0f13;font-family:var(--font);font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer">＋ 追加</button>
+  <!-- SCREEN: RECURRING -->
+  <div class="screen" id="screen-recur">
+    <div class="hist-header">
+      <div class="sec-title" style="margin-bottom:0">毎月の固定費</div>
+      <button onclick="openRecurAdd()" style="background:var(--accent);border:none;color:#0f0f13;font-family:var(--font);font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;touch-action:manipulation">＋ 追加</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">月初に自動で追加されるよ。<br>アプリを開いた時に当月分が未登録なら自動でセットされます。</div>
+    <div id="recurList"></div>
   </div>
-  <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">月初に自動で追加されるよ。<br>アプリを開いた時に当月分が未登録なら自動でセットされます。</div>
-  <div id="recurList"></div>
-</div>
+
+</div><!-- /scroll-area -->
 
 <!-- BOTTOM NAV -->
 <nav class="bottom-nav">
@@ -759,7 +759,9 @@ function initDesktop(){
   right.appendChild(dash);
 
   document.getElementById('screen-hist').remove();
-  document.getElementById('screen-recur').remove();
+  // recurringはモバイル専用画面なので非表示に（モーダルで代替）
+  const recurScreen = document.getElementById('screen-recur');
+  if(recurScreen) recurScreen.remove();
   wrap.appendChild(left); wrap.appendChild(right);
   sa.innerHTML=''; sa.appendChild(wrap);
 }
