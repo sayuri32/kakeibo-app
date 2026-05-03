@@ -1011,12 +1011,15 @@ document.getElementById('analyzeBtn').onclick=async()=>{
   document.getElementById('loadingBox').classList.add('on');
   try{
     const today=new Date().toISOString().slice(0,10);
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
+    // XサーバーのPHPプロキシ経由でAnthropicAPIを呼ぶ
+    const res=await fetch('https://happylife32.com/kakeibo/api.php?action=analyze',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-        {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":数値}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\n品目が多ければカテゴリ単位で集約可。JSONのみ。`}
-      ]}]})
+      body:JSON.stringify({
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":数値}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\n品目が多ければカテゴリ単位で集約可。JSONのみ。`}
+        ]}]
+      })
     });
     const data=await res.json();
     const txt=data.content?.[0]?.text||'';
