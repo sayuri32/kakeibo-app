@@ -1420,7 +1420,7 @@ document.getElementById('dayModalBg').onclick=e=>{if(e.target===document.getElem
 /* ── CATEGORY BUDGET SETTINGS ── */
 function openBudgetSettings(){
   document.getElementById('budgetSettingsForm').innerHTML = `
-    <div style="background:linear-gradient(135deg,#ffe0ec,#ffd6f0);border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+    <div style="background:linear-gradient(135deg,#ffe0ec,#ffd6f0);border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;box-shadow:0 4px 12px rgba(232,99,154,0.15)">
       <div>
         <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--accent);text-transform:uppercase">予算合計</div>
         <div id="budgetTotal" style="font-size:26px;font-weight:900;font-family:var(--mono);color:var(--accent);margin-top:2px">¥0</div>
@@ -1459,7 +1459,6 @@ function updateBudgetTotal(){
 }
 
 document.getElementById('budgetSettingsCancel').onclick=()=>document.getElementById('budgetSettingsModalBg').classList.remove('on');
-document.getElementById('budgetSettingsModalBg').onclick=e=>{if(e.target===document.getElementById('budgetSettingsModalBg'))document.getElementById('budgetSettingsModalBg').classList.remove('on');};
 
 document.getElementById('budgetSettingsSave').onclick=async()=>{
   const newBudget={};
