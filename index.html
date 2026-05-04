@@ -1419,14 +1419,43 @@ document.getElementById('dayModalBg').onclick=e=>{if(e.target===document.getElem
 
 /* ── CATEGORY BUDGET SETTINGS ── */
 function openBudgetSettings(){
-  document.getElementById('budgetSettingsForm').innerHTML = CATS.map(cat=>`
+  document.getElementById('budgetSettingsForm').innerHTML = `
+    <div style="background:linear-gradient(135deg,#ffe0ec,#ffd6f0);border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--accent);text-transform:uppercase">予算合計</div>
+        <div id="budgetTotal" style="font-size:26px;font-weight:900;font-family:var(--mono);color:var(--accent);margin-top:2px">¥0</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">設定済みカテゴリ</div>
+        <div id="budgetCatCount" style="font-size:16px;font-weight:700;color:var(--muted)">0 / ${CATS.length}</div>
+      </div>
+    </div>
+    ${CATS.map(cat=>`
     <div class="fg" style="margin-bottom:10px">
-      <label class="flabel">${cat}</label>
-      <input class="finput" id="bgt-${cat.replace(/\//g,'-')}" type="number"
-        placeholder="0（予算なし）" min="0" inputmode="numeric"
-        value="${BUDGET[cat]||''}">
-    </div>`).join('');
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <label class="flabel" style="margin-bottom:0">${cat}</label>
+        ${BUDGET[cat]?`<span style="font-size:10px;color:var(--accent);font-weight:700">設定済み</span>`:''}
+      </div>
+      <input class="finput bgt-input" id="bgt-${cat.replace(/\//g,'-')}"
+        type="number" placeholder="0（予算なし）" min="0" inputmode="numeric"
+        value="${BUDGET[cat]||''}" oninput="updateBudgetTotal()">
+    </div>`).join('')}`;
+  updateBudgetTotal();
   document.getElementById('budgetSettingsModalBg').classList.add('on');
+}
+
+function updateBudgetTotal(){
+  let total=0, count=0;
+  CATS.forEach(cat=>{
+    const el=document.getElementById(`bgt-${cat.replace(/\//g,'-')}`);
+    if(!el) return;
+    const val=parseInt(el.value)||0;
+    if(val>0){ total+=val; count++; }
+  });
+  const totalEl=document.getElementById('budgetTotal');
+  const countEl=document.getElementById('budgetCatCount');
+  if(totalEl) totalEl.textContent=`¥${total.toLocaleString()}`;
+  if(countEl) countEl.textContent=`${count} / ${CATS.length}`;
 }
 
 document.getElementById('budgetSettingsCancel').onclick=()=>document.getElementById('budgetSettingsModalBg').classList.remove('on');
