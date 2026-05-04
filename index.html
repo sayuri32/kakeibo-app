@@ -416,8 +416,28 @@
 
   <!-- DASHBOARD -->
   <div class="screen active" id="screen-dash">
-    <!-- 予算残高 -->
-    <div class="budget-card" id="budgetCard">
+    <!-- 収入カード（予算vs実績） -->
+    <div class="budget-card" id="budgetCard" style="margin-bottom:10px">
+      <div style="font-size:9px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px">収入</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:var(--surface2);border-radius:10px;padding:10px 12px">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">予算（固定）</div>
+          <div style="font-size:17px;font-weight:900;font-family:var(--mono);color:var(--green)" id="incomeBudget">¥0</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">固定収入の合計</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:10px;padding:10px 12px">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">実績</div>
+          <div style="font-size:17px;font-weight:900;font-family:var(--mono);color:var(--green)" id="incomeAmt">¥0</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px" id="incomeRate"></div>
+        </div>
+      </div>
+      <div class="budget-bar-track" style="margin-bottom:0">
+        <div class="budget-bar-fill" id="incomeFill" style="width:0%;background:var(--green)"></div>
+      </div>
+    </div>
+
+    <!-- 残り予算カード -->
+    <div class="budget-card" id="remainCard">
       <div class="budget-header">
         <div>
           <div class="budget-title">残り予算</div>
@@ -425,8 +445,8 @@
           <div class="budget-sub" id="budgetSub"></div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">収入</div>
-          <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--green)" id="incomeAmt">¥0</div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">支出</div>
+          <div style="font-size:16px;font-weight:900;font-family:var(--mono);color:var(--accent2)" id="expenseAmtSub">¥0</div>
         </div>
       </div>
       <div class="budget-bar-track">
@@ -940,14 +960,28 @@ function renderDash(){
 
   document.getElementById('totalAmt').textContent=`¥${total.toLocaleString()}`;
   document.getElementById('txSub').textContent=`支出${expenses.length}件 / 収入${income.length}件`;
-  document.getElementById('incomeAmt').textContent=`¥${totalInc.toLocaleString()}`;
+  document.getElementById('expenseAmtSub').textContent=`¥${total.toLocaleString()}`;
 
-  // 予算残高
+  // 収入：予算（固定収入の合計）vs 実績
+  const incomeBudget = RECUR.filter(r=>r.active&&r.type==='収入').reduce((s,r)=>s+r.amount,0);
+  document.getElementById('incomeBudget').textContent=`¥${incomeBudget.toLocaleString()}`;
+  document.getElementById('incomeAmt').textContent=`¥${totalInc.toLocaleString()}`;
+  if(incomeBudget>0){
+    const incPct=Math.min(Math.round(totalInc/incomeBudget*100),100);
+    document.getElementById('incomeRate').textContent=`予算の${incPct}% 達成`;
+    document.getElementById('incomeFill').style.width=incPct+'%';
+    document.getElementById('incomeFill').style.background=incPct>=100?'var(--accent)':'var(--green)';
+  } else {
+    document.getElementById('incomeRate').textContent='固定収入を登録してね';
+    document.getElementById('incomeFill').style.width='0%';
+  }
+
+  // 残り予算（実績収入ベース）
   const remain=totalInc-total;
   const remainEl=document.getElementById('budgetRemain');
   remainEl.textContent=`¥${Math.abs(remain).toLocaleString()}${remain<0?' オーバー':' 残り'}`;
   remainEl.className='budget-remain '+(totalInc===0?'ok':remain<0?'over':remain<totalInc*0.1?'warn':'ok');
-  document.getElementById('budgetSub').textContent=totalInc>0?`収入 ¥${totalInc.toLocaleString()} の ${Math.round(total/totalInc*100)}% 使用`:'収入を登録すると残高が表示されます';
+  document.getElementById('budgetSub').textContent=totalInc>0?`実績収入 ¥${totalInc.toLocaleString()} の ${Math.round(total/totalInc*100)}% 使用`:'収入を登録すると残高が表示されます';
   const pct=totalInc>0?Math.min(total/totalInc*100,100):0;
   const bar=document.getElementById('budgetBarFill');
   bar.style.width=pct+'%';
