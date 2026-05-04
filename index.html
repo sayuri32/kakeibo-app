@@ -491,7 +491,10 @@
       </div>
     </div>
     <div class="cat-list">
-      <div class="sec-title">カテゴリ別</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="sec-title" style="margin-bottom:0">カテゴリ別</div>
+        <button onclick="openBudgetSettings()" style="background:none;border:1px solid var(--border);color:var(--accent);font-family:var(--font);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;touch-action:manipulation">⚙️ 予算設定</button>
+      </div>
       <div id="catRows"></div>
     </div>
   </div>
@@ -659,6 +662,20 @@
   </div>
 </div>
 
+<!-- MODAL: CATEGORY BUDGET SETTINGS -->
+<div class="modal-bg" id="budgetSettingsModalBg">
+  <div class="modal-sheet" style="max-height:92dvh">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">カテゴリ別予算設定 <em>⚙️</em></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">0のカテゴリは予算なしとして扱われます</div>
+    <div id="budgetSettingsForm"></div>
+    <div class="sheet-actions">
+      <button class="sheet-cancel" id="budgetSettingsCancel">キャンセル</button>
+      <button class="sheet-save" id="budgetSettingsSave">保存する</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: TX EDIT -->
 <div class="modal-bg" id="txEditModalBg">
   <div class="modal-sheet">
@@ -711,6 +728,7 @@
 /* ── CONSTANTS ── */
 const KEY    = 'kakeibo_v2';
 const RKEY   = 'kakeibo_recur';
+const BKEY   = 'kakeibo_budget'; // カテゴリ別予算
 const CATS   = ['食費','外食費','日用品','サブスク','交通/車','住居/通信','医療/美容','教育','服飾費','交遊費','保険','貯蓄','雑費'];
 const COLORS = ['#f4a7c0','#b8a9e8','#a8d8b0','#f9c784','#a8c8f0','#f4b8a0','#c8a8e8','#a8e0d8','#f4a0b8','#d4b8a8','#b8d8a8','#f0c8a0'];
 
@@ -763,14 +781,16 @@ async function load()   { const d=await fetchAll(); return d.db||{}; }
 async function save(d)  { const a=await fetchAll(); await pushAll({...a,db:d}); }
 async function loadR()  { const d=await fetchAll(); return d.recur||[]; }
 async function saveR(d) { const a=await fetchAll(); await pushAll({...a,recur:d}); }
+async function loadB()  { const d=await fetchAll(); return d.budget||{}; }
+async function saveB(d) { const a=await fetchAll(); await pushAll({...a,budget:d}); }
 
 /* ── STATE ── */
-let DB={}, RECUR=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
+let DB={}, RECUR=[], BUDGET={}, cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
 
 /* ── INIT ── */
 async function initApp(){
   document.getElementById('totalAmt').textContent='読込中...';
-  DB=await load(); RECUR=await loadR();
+  DB=await load(); RECUR=await loadR(); BUDGET=await loadB();
   const now=new Date();
   cy=now.getFullYear(); cm=now.getMonth()+1;
   document.getElementById('m-date').value=now.toISOString().slice(0,10);
@@ -1011,10 +1031,31 @@ function renderDash(){
   if(sorted.length){
     document.getElementById('topCatVal').textContent=sorted[0][0];
     document.getElementById('topCatSub').textContent=`¥${sorted[0][1].toLocaleString()}`;
-    const max=sorted[0][1];
+    const maxAmt=sorted[0][1];
     document.getElementById('catRows').innerHTML=sorted.map(([cat,amt],idx)=>{
-      const pct=Math.round(amt/max*100);
-      return `<div class="cat-row"><div class="cat-name">${h(cat)}</div><div class="cat-track"><div class="cat-bar" style="width:${pct}%;background:${COLORS[idx%COLORS.length]}">${pct>18?`<span>${pct}%</span>`:''}</div></div><div class="cat-amt">¥${amt.toLocaleString()}</div></div>`;
+      const budget=BUDGET[cat]||0;
+      const hasBudget=budget>0;
+      const over=hasBudget&&amt>budget;
+      const pct=Math.round(amt/maxAmt*100);
+      const budgetPct=hasBudget?Math.min(Math.round(budget/maxAmt*100),100):0;
+      const usedPct=hasBudget?Math.min(Math.round(amt/budget*100),100):100;
+      const barColor=over?'var(--red)':hasBudget&&usedPct>=90?'var(--orange)':COLORS[idx%COLORS.length];
+
+      return `<div style="margin-bottom:12px">
+        <div class="cat-row" style="margin-bottom:4px">
+          <div class="cat-name">${h(cat)}</div>
+          <div class="cat-track" style="position:relative">
+            ${hasBudget?`<div style="position:absolute;left:${budgetPct}%;top:0;bottom:0;width:2px;background:rgba(0,0,0,0.2);z-index:1;border-radius:1px"></div>`:''}
+            <div class="cat-bar" style="width:${pct}%;background:${barColor}">
+              ${pct>18?`<span>${pct}%</span>`:''}
+            </div>
+          </div>
+          <div class="cat-amt" style="color:${over?'var(--red)':'var(--text)'}">¥${amt.toLocaleString()}</div>
+        </div>
+        ${hasBudget?`<div style="display:flex;justify-content:flex-end;font-size:10px;color:${over?'var(--red)':'var(--muted)'};padding-right:0">
+          ${over?`⚠️ 予算超過 ¥${(amt-budget).toLocaleString()}`:`予算 ¥${budget.toLocaleString()} の ${usedPct}% 使用`}
+        </div>`:''}
+      </div>`;
     }).join('');
   } else {
     document.getElementById('topCatVal').textContent='—';
@@ -1375,6 +1416,34 @@ function openDayDetail(ds){
   document.getElementById('dayModalBg').classList.add('on');
 }
 document.getElementById('dayModalBg').onclick=e=>{if(e.target===document.getElementById('dayModalBg'))document.getElementById('dayModalBg').classList.remove('on');};
+
+/* ── CATEGORY BUDGET SETTINGS ── */
+function openBudgetSettings(){
+  document.getElementById('budgetSettingsForm').innerHTML = CATS.map(cat=>`
+    <div class="fg" style="margin-bottom:10px">
+      <label class="flabel">${cat}</label>
+      <input class="finput" id="bgt-${cat.replace(/\//g,'-')}" type="number"
+        placeholder="0（予算なし）" min="0" inputmode="numeric"
+        value="${BUDGET[cat]||''}">
+    </div>`).join('');
+  document.getElementById('budgetSettingsModalBg').classList.add('on');
+}
+
+document.getElementById('budgetSettingsCancel').onclick=()=>document.getElementById('budgetSettingsModalBg').classList.remove('on');
+document.getElementById('budgetSettingsModalBg').onclick=e=>{if(e.target===document.getElementById('budgetSettingsModalBg'))document.getElementById('budgetSettingsModalBg').classList.remove('on');};
+
+document.getElementById('budgetSettingsSave').onclick=async()=>{
+  const newBudget={};
+  CATS.forEach(cat=>{
+    const val=parseInt(document.getElementById(`bgt-${cat.replace(/\//g,'-')}`).value)||0;
+    if(val>0) newBudget[cat]=val;
+  });
+  BUDGET=newBudget;
+  await saveB(BUDGET);
+  document.getElementById('budgetSettingsModalBg').classList.remove('on');
+  render();
+  toast('予算を保存したよ！','ok');
+};
 
 /* ── MONTH NAV ── */
 document.getElementById('prevMonth').onclick=async()=>{if(cm===1){cy--;cm=12;}else cm--;activeCatFilter='all';await applyRecurring();render();};
