@@ -664,12 +664,24 @@
 
 <!-- MODAL: CATEGORY BUDGET SETTINGS -->
 <div class="modal-bg" id="budgetSettingsModalBg">
-  <div class="modal-sheet" style="max-height:92dvh">
+  <div class="modal-sheet" style="max-height:92dvh;display:flex;flex-direction:column;padding-bottom:0">
     <div class="sheet-handle"></div>
-    <div class="sheet-title">カテゴリ別予算設定 <em>⚙️</em></div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">0のカテゴリは予算なしとして扱われます</div>
-    <div id="budgetSettingsForm"></div>
-    <div class="sheet-actions">
+    <div class="sheet-title" style="flex-shrink:0">カテゴリ別予算設定 <em>⚙️</em></div>
+    <!-- 合計カード：スクロール外に固定 -->
+    <div style="background:linear-gradient(135deg,#ffe0ec,#ffd6f0);border-radius:14px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;box-shadow:0 4px 12px rgba(232,99,154,0.15)">
+      <div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--accent);text-transform:uppercase">予算合計</div>
+        <div id="budgetTotal" style="font-size:26px;font-weight:900;font-family:var(--mono);color:var(--accent);margin-top:2px">¥0</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">設定済みカテゴリ</div>
+        <div id="budgetCatCount" style="font-size:16px;font-weight:700;color:var(--muted)">0 / 0</div>
+      </div>
+    </div>
+    <!-- スクロール可能なフォーム -->
+    <div id="budgetSettingsForm" style="overflow-y:auto;flex:1;padding-bottom:8px"></div>
+    <!-- アクションボタン：スクロール外に固定 -->
+    <div class="sheet-actions" style="flex-shrink:0;padding:12px 0 max(20px,calc(env(safe-area-inset-bottom)+12px))">
       <button class="sheet-cancel" id="budgetSettingsCancel">キャンセル</button>
       <button class="sheet-save" id="budgetSettingsSave">保存する</button>
     </div>
@@ -1043,7 +1055,7 @@ function renderDash(){
 
       return `<div style="margin-bottom:12px">
         <div class="cat-row" style="margin-bottom:4px">
-          <div class="cat-name">${h(cat)}</div>
+          <div class="cat-name" onclick="jumpToCategory('${cat}')" style="cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px;text-decoration-style:dotted">${h(cat)}</div>
           <div class="cat-track" style="position:relative">
             ${hasBudget?`<div style="position:absolute;left:${budgetPct}%;top:0;bottom:0;width:2px;background:rgba(0,0,0,0.2);z-index:1;border-radius:1px"></div>`:''}
             <div class="cat-bar" style="width:${pct}%;background:${barColor}">
@@ -1052,9 +1064,12 @@ function renderDash(){
           </div>
           <div class="cat-amt" style="color:${over?'var(--red)':'var(--text)'}">¥${amt.toLocaleString()}</div>
         </div>
-        ${hasBudget?`<div style="display:flex;justify-content:flex-end;font-size:10px;color:${over?'var(--red)':'var(--muted)'};padding-right:0">
-          ${over?`⚠️ 予算超過 ¥${(amt-budget).toLocaleString()}`:`予算 ¥${budget.toLocaleString()} の ${usedPct}% 使用`}
-        </div>`:''}
+        <div style="display:flex;justify-content:space-between">
+          ${cat==='食費'?`<div style="font-size:10px;color:var(--muted)">1日平均 ¥${Math.round(amt/Math.max(days,1)).toLocaleString()}</div>`:'<div></div>'}
+          ${hasBudget?`<div style="font-size:10px;color:${over?'var(--red)':'var(--muted)'}">
+            ${over?`⚠️ 予算超過 ¥${(amt-budget).toLocaleString()}`:`予算 ¥${budget.toLocaleString()} の ${usedPct}% 使用`}
+          </div>`:''}
+        </div>
       </div>`;
     }).join('');
   } else {
@@ -1419,18 +1434,9 @@ document.getElementById('dayModalBg').onclick=e=>{if(e.target===document.getElem
 
 /* ── CATEGORY BUDGET SETTINGS ── */
 function openBudgetSettings(){
-  document.getElementById('budgetSettingsForm').innerHTML = `
-    <div style="background:linear-gradient(135deg,#ffe0ec,#ffd6f0);border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;box-shadow:0 4px 12px rgba(232,99,154,0.15)">
-      <div>
-        <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--accent);text-transform:uppercase">予算合計</div>
-        <div id="budgetTotal" style="font-size:26px;font-weight:900;font-family:var(--mono);color:var(--accent);margin-top:2px">¥0</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">設定済みカテゴリ</div>
-        <div id="budgetCatCount" style="font-size:16px;font-weight:700;color:var(--muted)">0 / ${CATS.length}</div>
-      </div>
-    </div>
-    ${CATS.map(cat=>`
+  document.getElementById('budgetSettingsForm').innerHTML =
+    `<div style="font-size:12px;color:var(--muted);margin-bottom:14px">0のカテゴリは予算なしとして扱われます</div>`+
+    CATS.map(cat=>`
     <div class="fg" style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <label class="flabel" style="margin-bottom:0">${cat}</label>
@@ -1439,7 +1445,9 @@ function openBudgetSettings(){
       <input class="finput bgt-input" id="bgt-${cat.replace(/\//g,'-')}"
         type="number" placeholder="0（予算なし）" min="0" inputmode="numeric"
         value="${BUDGET[cat]||''}" oninput="updateBudgetTotal()">
-    </div>`).join('')}`;
+    </div>`).join('');
+  // カウント初期化
+  document.getElementById('budgetCatCount').textContent=`0 / ${CATS.length}`;
   updateBudgetTotal();
   document.getElementById('budgetSettingsModalBg').classList.add('on');
 }
@@ -1472,6 +1480,19 @@ document.getElementById('budgetSettingsSave').onclick=async()=>{
   render();
   toast('予算を保存したよ！','ok');
 };
+
+/* ── JUMP TO CATEGORY ── */
+function jumpToCategory(cat){
+  activeCatFilter = cat;
+  // 履歴タブに切り替え
+  document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const histBtn = document.querySelector('.bnav-btn[data-s="hist"]');
+  const histScreen = document.getElementById('screen-hist');
+  if(histBtn) histBtn.classList.add('active');
+  if(histScreen){ histScreen.classList.add('active'); document.getElementById('scrollArea').scrollTop=0; }
+  renderList();
+}
 
 /* ── MONTH NAV ── */
 document.getElementById('prevMonth').onclick=async()=>{if(cm===1){cy--;cm=12;}else cm--;activeCatFilter='all';await applyRecurring();render();};
