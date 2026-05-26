@@ -443,6 +443,7 @@
           <div class="budget-title">残り予算</div>
           <div class="budget-remain ok" id="budgetRemain">計算中...</div>
           <div class="budget-sub" id="budgetSub"></div>
+          <div id="savingsRemain" style="font-size:11px;margin-top:4px;font-weight:700"></div>
         </div>
         <div style="text-align:right">
           <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase">支出</div>
@@ -518,23 +519,25 @@
       <button class="btn btn-solid" id="analyzeBtn">AIで解析する</button>
     </div>
     <div class="add-panel" id="panel-manual">
-      <div class="fg"><label class="flabel">店名 / サービス名</label><input class="finput" id="m-shop" type="text" placeholder="例：Netflix、スタバ" autocomplete="off"></div>
-      <div class="frow">
-        <div class="fg"><label class="flabel">金額（円）</label><input class="finput" id="m-amount" type="number" placeholder="0" min="0" inputmode="numeric"></div>
-        <div class="fg"><label class="flabel">日付</label><input class="finput" id="m-date" type="date"></div>
+      <div class="fg" style="margin-bottom:8px"><label class="flabel">店名 / サービス名</label><input class="finput" id="m-shop" type="text" placeholder="例：Netflix、スタバ" autocomplete="off" style="padding:10px 12px;font-size:15px"></div>
+      <div class="frow" style="gap:8px">
+        <div class="fg" style="margin-bottom:8px"><label class="flabel">金額（円）</label><input class="finput" id="m-amount" type="number" placeholder="0" min="0" inputmode="numeric" style="padding:10px 12px;font-size:15px"></div>
+        <div class="fg" style="margin-bottom:8px"><label class="flabel">日付</label><input class="finput" id="m-date" type="date" style="padding:10px 12px;font-size:15px"></div>
       </div>
-      <div class="fg"><label class="flabel">カテゴリ</label>
-        <select class="fselect" id="m-cat">
-          <option>食費</option><option>外食費</option><option>日用品</option><option>サブスク</option>
-          <option>交通/車</option><option>住居/通信</option><option>医療/美容</option><option>教育</option>
-          <option>服飾費</option><option>交遊費</option><option>保険</option><option>貯蓄</option><option>雑費</option>
-        </select>
+      <div class="frow" style="gap:8px">
+        <div class="fg" style="margin-bottom:8px"><label class="flabel">カテゴリ</label>
+          <select class="fselect" id="m-cat" style="padding:10px 12px;font-size:15px">
+            <option>食費</option><option>外食費</option><option>日用品</option><option>サブスク</option>
+            <option>交通/車</option><option>住居/通信</option><option>医療/美容</option><option>教育</option>
+            <option>服飾費</option><option>交遊費</option><option>保険</option><option>貯蓄</option><option>雑費</option>
+          </select>
+        </div>
+        <div class="fg" style="margin-bottom:8px"><label class="flabel">種別</label>
+          <select class="fselect" id="m-type" style="padding:10px 12px;font-size:15px"><option value="支出">支出</option><option value="収入">収入</option></select>
+        </div>
       </div>
-      <div class="fg"><label class="flabel">種別</label>
-        <select class="fselect" id="m-type"><option value="支出">支出</option><option value="収入">収入</option></select>
-      </div>
-      <div class="fg"><label class="flabel">メモ（任意）</label><input class="finput" id="m-memo" type="text" placeholder="例：月額、家族分など" autocomplete="off"></div>
-      <button class="btn btn-outline" id="addBtn">＋ 追加する</button>
+      <div class="fg" style="margin-bottom:8px"><label class="flabel">メモ（任意）</label><input class="finput" id="m-memo" type="text" placeholder="例：月額、家族分など" autocomplete="off" style="padding:10px 12px;font-size:15px"></div>
+      <button class="btn btn-outline" id="addBtn" style="padding:12px;margin-top:4px">＋ 追加する</button>
     </div>
     <div class="add-panel" id="panel-csv">
       <div class="drop-zone" id="csvDropZone">
@@ -1008,16 +1011,43 @@ function renderDash(){
     document.getElementById('incomeFill').style.width='0%';
   }
 
-  // 残り予算（実績収入ベース）
+  // カテゴリ集計（残高計算でも使うので先に）
+  const catMap={};
+  expenses.forEach(i=>{catMap[i.category]=(catMap[i.category]||0)+i.amount;});
+
+  // 残り予算（実績収入ベース＋予算超過分を貯蓄から差し引き）
   const remain=totalInc-total;
+
+  // 予算超過の合計（貯蓄カテゴリ以外）
+  let overTotal=0;
+  Object.entries(catMap).forEach(([cat,amt])=>{
+    const budget=BUDGET[cat]||0;
+    if(budget>0&&cat!=='貯蓄'&&amt>budget) overTotal+=amt-budget;
+  });
+
+  // 貯蓄残高（貯蓄カテゴリの支出 - 予算超過分）
+  const savingsAmt = catMap['貯蓄']||0;
+  const savingsAfterOver = Math.max(savingsAmt - overTotal, 0);
+
   const remainEl=document.getElementById('budgetRemain');
   remainEl.textContent=`¥${Math.abs(remain).toLocaleString()}${remain<0?' オーバー':' 残り'}`;
   remainEl.className='budget-remain '+(totalInc===0?'ok':remain<0?'over':remain<totalInc*0.1?'warn':'ok');
-  document.getElementById('budgetSub').textContent=totalInc>0?`実績収入 ¥${totalInc.toLocaleString()} の ${Math.round(total/totalInc*100)}% 使用`:'収入を登録すると残高が表示されます';
+
+  let subText = totalInc>0?`実績収入 ¥${totalInc.toLocaleString()} の ${Math.round(total/totalInc*100)}% 使用`:'収入を登録すると残高が表示されます';
+  if(overTotal>0) subText += `｜ 予算超過 ¥${overTotal.toLocaleString()} を貯蓄から充当`;
+  document.getElementById('budgetSub').textContent=subText;
+
   const pct=totalInc>0?Math.min(total/totalInc*100,100):0;
   const bar=document.getElementById('budgetBarFill');
   bar.style.width=pct+'%';
   bar.style.background=pct>=100?'var(--red)':pct>=90?'var(--orange)':'var(--green)';
+
+  // 貯蓄残高を表示（超過分差し引き後）
+  const savingsEl = document.getElementById('savingsRemain');
+  if(savingsEl){
+    savingsEl.textContent = `貯蓄 ¥${savingsAfterOver.toLocaleString()}${overTotal>0?` (▲¥${overTotal.toLocaleString()} 充当)`:''}`;
+    savingsEl.style.color = savingsAfterOver < savingsAmt ? 'var(--orange)' : 'var(--green)';
+  }
 
   // 1日平均
   const now=new Date();
@@ -1036,9 +1066,7 @@ function renderDash(){
     document.getElementById('diffSub').textContent='前月データなし';
   }
 
-  // カテゴリ
-  const catMap={};
-  expenses.forEach(i=>{catMap[i.category]=(catMap[i.category]||0)+i.amount;});
+  // カテゴリ（catMapは上で計算済み）
   const sorted=Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
   if(sorted.length){
     document.getElementById('topCatVal').textContent=sorted[0][0];
