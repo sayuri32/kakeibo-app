@@ -1570,22 +1570,68 @@ document.getElementById('analyzeBtn').onclick=async()=>{
   document.getElementById('loadingBox').classList.add('on');
   try{
     const today=new Date().toISOString().slice(0,10);
-    const res=await fetch('https://happylife32.com/kakeibo/api.php?action=analyze',{
-      method:'POST',headers:authHeaders(),
-      body:JSON.stringify({messages:[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-        {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":数値}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\nJSONのみ。`}
-      ]}]})
-    });
+    let res;
+    try{
+      res=await fetch('https://happylife32.com/kakeibo/api.php?action=analyze',{
+        method:'POST',headers:authHeaders(),
+        body:JSON.stringify({messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":数値}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\nJSONのみ。`}
+        ]}]})
+      });
+    }catch(networkErr){
+      toast('通信エラー：ネットワークを確認してね','err');
+      return;
+    }
+
+    // HTTPステータスで原因を判別
+    if(res.status===401){
+      toast('認証エラー(401)：再ログインしてね','err');
+      setTimeout(()=>showLogin(),1500);
+      return;
+    }
+    if(res.status===405){
+      toast('サーバーエラー(405)：api.phpを確認してね','err');
+      return;
+    }
+    if(res.status===500){
+      toast('サーバーエラー(500)：Xサーバー側の問題かも','err');
+      return;
+    }
+    if(!res.ok){
+      toast(`エラー(${res.status})：しばらく待ってから試してね','err`,'err');
+      return;
+    }
+
     const data=await res.json();
+
+    // Anthropic API側のエラー
+    if(data.error){
+      const errType=data.error?.type||'unknown';
+      if(errType==='authentication_error') toast('APIキーが無効です：api.phpを確認してね','err');
+      else if(errType==='overloaded_error') toast('AIが混雑中(529)：少し待ってから試してね','err');
+      else if(errType==='rate_limit_error') toast('API制限中(429)：しばらく待ってから試してね','err');
+      else toast(`AI解析エラー(${errType})：もう一度試してね','err`,'err');
+      return;
+    }
+
     const txt=data.content?.[0]?.text||'';
-    const m=txt.match(/\{[\s\S]*\}/);if(!m)throw 0;
+    const m=txt.match(/\{[\s\S]*\}/);
+    if(!m){
+      toast('解析結果を読み取れなかったよ。別の画像を試してね','err');
+      return;
+    }
     const p=JSON.parse(m[0]);
     pending=(p.items?.length?p.items:[{name:p.shop,amount:p.total,category:'雑費'}])
       .map(it=>({shop:p.shop,date:p.date,amount:it.amount,category:it.category,memo:it.name,source:'receipt',type:'支出'}));
     openModal(p);
-  }catch{toast('解析に失敗しました','err');}
-  finally{document.getElementById('loadingBox').classList.remove('on');btn.disabled=false;}
+  }catch(e){
+    toast('予期せぬエラーが発生しました','err');
+    console.error(e);
+  }finally{
+    document.getElementById('loadingBox').classList.remove('on');
+    btn.disabled=false;
+  }
 };
 
 function openModal(p){
