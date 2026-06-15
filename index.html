@@ -1015,26 +1015,14 @@ function renderDash(){
   const catMap={};
   expenses.forEach(i=>{catMap[i.category]=(catMap[i.category]||0)+i.amount;});
 
-  // 残り予算（実績収入ベース＋予算超過分を貯蓄から差し引き）
+  // 残り予算
   const remain=totalInc-total;
-
-  // 予算超過の合計（貯蓄カテゴリ以外）
-  let overTotal=0;
-  Object.entries(catMap).forEach(([cat,amt])=>{
-    const budget=BUDGET[cat]||0;
-    if(budget>0&&cat!=='貯蓄'&&amt>budget) overTotal+=amt-budget;
-  });
-
-  // 貯蓄残高（貯蓄カテゴリの支出 - 予算超過分）
-  const savingsAmt = catMap['貯蓄']||0;
-  const savingsAfterOver = Math.max(savingsAmt - overTotal, 0);
 
   const remainEl=document.getElementById('budgetRemain');
   remainEl.textContent=`¥${Math.abs(remain).toLocaleString()}${remain<0?' オーバー':' 残り'}`;
   remainEl.className='budget-remain '+(totalInc===0?'ok':remain<0?'over':remain<totalInc*0.1?'warn':'ok');
 
   let subText = totalInc>0?`実績収入 ¥${totalInc.toLocaleString()} の ${Math.round(total/totalInc*100)}% 使用`:'収入を登録すると残高が表示されます';
-  if(overTotal>0) subText += `｜ 予算超過 ¥${overTotal.toLocaleString()} を貯蓄から充当`;
   document.getElementById('budgetSub').textContent=subText;
 
   const pct=totalInc>0?Math.min(total/totalInc*100,100):0;
@@ -1042,11 +1030,14 @@ function renderDash(){
   bar.style.width=pct+'%';
   bar.style.background=pct>=100?'var(--red)':pct>=90?'var(--orange)':'var(--green)';
 
-  // 貯蓄残高を表示（超過分差し引き後）
+  // 貯蓄残高 = 収入 - (支出合計から貯蓄を除いた額) → 実質手元に残る額
+  const savingsAmt = catMap['貯蓄']||0;
+  const expenseWithoutSavings = total - savingsAmt;
+  const actualSavings = totalInc - expenseWithoutSavings;
   const savingsEl = document.getElementById('savingsRemain');
   if(savingsEl){
-    savingsEl.textContent = `貯蓄 ¥${savingsAfterOver.toLocaleString()}${overTotal>0?` (▲¥${overTotal.toLocaleString()} 充当)`:''}`;
-    savingsEl.style.color = savingsAfterOver < savingsAmt ? 'var(--orange)' : 'var(--green)';
+    savingsEl.textContent = `実質貯蓄可能額 ¥${actualSavings.toLocaleString()}`;
+    savingsEl.style.color = actualSavings >= savingsAmt ? 'var(--green)' : 'var(--orange)';
   }
 
   // 1日平均
@@ -1576,7 +1567,7 @@ document.getElementById('analyzeBtn').onclick=async()=>{
         method:'POST',headers:authHeaders(),
         body:JSON.stringify({messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-          {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":数値}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\nJSONのみ。`}
+          {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":レシートに記載の合計金額（最重要・必ず正確に読み取る）}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\ntotalは合計欄の数字を使うこと。品目は参考程度でOK。JSONのみ。`}
         ]}]})
       });
     }catch(networkErr){
@@ -1622,8 +1613,13 @@ document.getElementById('analyzeBtn').onclick=async()=>{
       return;
     }
     const p=JSON.parse(m[0]);
-    pending=(p.items?.length?p.items:[{name:p.shop,amount:p.total,category:'雑費'}])
-      .map(it=>({shop:p.shop,date:p.date,amount:it.amount,category:it.category,memo:it.name,source:'receipt',type:'支出'}));
+    // 合計金額1件として登録（品目の積み上げではなくtotalを使う）
+    const totalAmt = p.total || (p.items||[]).reduce((s,i)=>s+(i.amount||0),0);
+    // カテゴリは品目の中で最多のものを採用（なければ食費）
+    const catCount={};
+    (p.items||[]).forEach(it=>{ catCount[it.category]=(catCount[it.category]||0)+1; });
+    const topCat = Object.entries(catCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || '食費';
+    pending=[{shop:p.shop, date:p.date, amount:totalAmt, category:topCat, memo:'', source:'receipt', type:'支出'}];
     openModal(p);
   }catch(e){
     toast('予期せぬエラーが発生しました','err');
@@ -1635,23 +1631,28 @@ document.getElementById('analyzeBtn').onclick=async()=>{
 };
 
 function openModal(p){
-  document.getElementById('sheetInfo').textContent=`📍 ${p.shop}  ·  ${p.date}  ·  合計 ¥${p.total?.toLocaleString()??'?'}`;
-  document.getElementById('sheetItems').innerHTML=pending.map((it,i)=>`
+  const it = pending[0];
+  document.getElementById('sheetInfo').textContent=`📍 ${p.shop}  ·  ${p.date}`;
+  document.getElementById('sheetItems').innerHTML=`
     <div class="sheet-item">
-      <div class="sheet-item-name">${h(it.memo||it.shop)}</div>
-      <div class="sheet-item-price">¥${it.amount.toLocaleString()}</div>
-      <div class="sheet-item-cat"><select id="sc-${i}">${CATS.map(c=>`<option${c===it.category?' selected':''}>${c}</option>`).join('')}</select></div>
-    </div>`).join('');
+      <div class="sheet-item-name" style="font-size:15px;font-weight:700">${h(p.shop)}</div>
+      <div class="sheet-item-price" style="font-size:18px">¥${it.amount.toLocaleString()}</div>
+      <div class="sheet-item-cat">
+        <select id="sc-0">${CATS.map(c=>`<option${c===it.category?' selected':''}>${c}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;padding:8px 0;border-top:1px solid var(--border)">
+      📋 レシート内 ${p.items?.length||0}品目 → 合計金額で1件登録
+    </div>`;
   document.getElementById('modalBg').classList.add('on');
 }
 document.getElementById('modalCancel').onclick=()=>document.getElementById('modalBg').classList.remove('on');
 document.getElementById('modalBg').onclick=e=>{if(e.target===document.getElementById('modalBg'))document.getElementById('modalBg').classList.remove('on');};
 document.getElementById('modalSave').onclick=async()=>{
-  pending.forEach((it,i)=>{const s=document.getElementById(`sc-${i}`);if(s)it.category=s.value;});
+  const cat = document.getElementById('sc-0')?.value || pending[0]?.category || '食費';
+  const it = pending[0];
   const key=mkey(cy,cm);if(!DB[key])DB[key]=[];
-  const grp={};
-  pending.forEach(it=>{const k=it.category;if(!grp[k])grp[k]={...it,amount:0};grp[k].amount+=it.amount;});
-  Object.values(grp).forEach(it=>DB[key].push({id:Date.now()+Math.random(),shop:it.shop,date:it.date,amount:it.amount,category:it.category,memo:it.shop,source:'receipt',type:'支出'}));
+  DB[key].push({id:Date.now()+Math.random(),shop:it.shop,date:it.date,amount:it.amount,category:cat,memo:'',source:'receipt',type:'支出'});
   await save(DB);
   document.getElementById('modalBg').classList.remove('on');
   b64=null;document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
