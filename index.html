@@ -36,6 +36,8 @@
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html { height: 100%; }
   body { background: var(--bg); color: var(--text); font-family: var(--font); height: 100dvh; overflow: hidden; }
+  /* iOS Safariは16px未満の入力欄にフォーカスすると自動拡大する */
+  input, select, textarea { font-size: 16px; }
 
   /* ── HEADER ── */
   header {
@@ -201,6 +203,12 @@
   .btn-solid { background: linear-gradient(135deg, #e8639a 0%, #d45490 100%); color: #fff; box-shadow: 0 4px 12px rgba(232,99,154,0.3); }
   .btn-outline { background: transparent; border: 1.5px solid var(--accent) !important; color: var(--accent); }
   #analyzeBtn { display: none; }
+  #receiptRetryBtn { display: none; }
+  .receipt-error {
+    display: none; margin-top: 12px; padding: 11px 12px; border-radius: 10px;
+    background: #fff0f0; border: 1px solid #f3c1c1; color: var(--red);
+    font-size: 12px; line-height: 1.6;
+  }
 
   .fg { margin-bottom: 12px; }
   .flabel { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; display: block; }
@@ -284,7 +292,7 @@
   .sheet-item-name { font-size: 13px; font-weight: 700; }
   .sheet-item-price { font-size: 14px; font-weight: 700; color: var(--accent); font-family: var(--mono); text-align: right; }
   .sheet-item-cat { grid-column: 1 / -1; }
-  .sheet-item-cat select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 13px; padding: 8px 12px; border-radius: 8px; outline: none; -webkit-appearance: none; }
+  .sheet-item-cat select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 16px; padding: 8px 12px; border-radius: 8px; outline: none; -webkit-appearance: none; }
   .sheet-actions { display: flex; gap: 10px; margin-top: 18px; }
   .sheet-cancel { flex: 1; padding: 14px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 12px; font-family: var(--font); font-size: 14px; cursor: pointer; touch-action: manipulation; }
   .sheet-save { flex: 2; padding: 14px; background: var(--accent); border: none; color: #fff; border-radius: 12px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
@@ -516,27 +524,29 @@
       </div>
       <div id="preview"><img id="prevImg" src="" alt=""><button class="rm-btn" id="removeImg">✕</button></div>
       <div class="loading-box" id="loadingBox"><div class="spinner"></div><div class="loading-txt">AIが解析中...</div></div>
+      <div class="receipt-error" id="receiptError" role="alert"></div>
       <button class="btn btn-solid" id="analyzeBtn">AIで解析する</button>
+      <button class="btn btn-outline" id="receiptRetryBtn">↻ もう一度試す</button>
     </div>
     <div class="add-panel" id="panel-manual">
-      <div class="fg" style="margin-bottom:8px"><label class="flabel">店名 / サービス名</label><input class="finput" id="m-shop" type="text" placeholder="例：Netflix、スタバ" autocomplete="off" style="padding:10px 12px;font-size:15px"></div>
+      <div class="fg" style="margin-bottom:8px"><label class="flabel">店名 / サービス名</label><input class="finput" id="m-shop" type="text" placeholder="例：Netflix、スタバ" autocomplete="off" style="padding:10px 12px;font-size:16px"></div>
       <div class="frow" style="gap:8px">
-        <div class="fg" style="margin-bottom:8px"><label class="flabel">金額（円）</label><input class="finput" id="m-amount" type="number" placeholder="0" min="0" inputmode="numeric" style="padding:10px 12px;font-size:15px"></div>
-        <div class="fg" style="margin-bottom:8px"><label class="flabel">日付</label><input class="finput" id="m-date" type="date" style="padding:10px 12px;font-size:15px"></div>
+        <div class="fg" style="margin-bottom:8px"><label class="flabel">金額（円）</label><input class="finput" id="m-amount" type="number" placeholder="0" min="0" inputmode="numeric" style="padding:10px 12px;font-size:16px"></div>
+        <div class="fg" style="margin-bottom:8px"><label class="flabel">日付</label><input class="finput" id="m-date" type="date" style="padding:10px 12px;font-size:16px"></div>
       </div>
       <div class="frow" style="gap:8px">
         <div class="fg" style="margin-bottom:8px"><label class="flabel">カテゴリ</label>
-          <select class="fselect" id="m-cat" style="padding:10px 12px;font-size:15px">
+          <select class="fselect" id="m-cat" style="padding:10px 12px;font-size:16px">
             <option>食費</option><option>外食費</option><option>日用品</option><option>サブスク</option>
             <option>交通/車</option><option>住居/通信</option><option>医療/美容</option><option>教育</option>
             <option>服飾費</option><option>交遊費</option><option>保険</option><option>貯蓄</option><option>雑費</option>
           </select>
         </div>
         <div class="fg" style="margin-bottom:8px"><label class="flabel">種別</label>
-          <select class="fselect" id="m-type" style="padding:10px 12px;font-size:15px"><option value="支出">支出</option><option value="収入">収入</option></select>
+          <select class="fselect" id="m-type" style="padding:10px 12px;font-size:16px"><option value="支出">支出</option><option value="収入">収入</option></select>
         </div>
       </div>
-      <div class="fg" style="margin-bottom:8px"><label class="flabel">メモ（任意）</label><input class="finput" id="m-memo" type="text" placeholder="例：月額、家族分など" autocomplete="off" style="padding:10px 12px;font-size:15px"></div>
+      <div class="fg" style="margin-bottom:8px"><label class="flabel">メモ（任意）</label><input class="finput" id="m-memo" type="text" placeholder="例：月額、家族分など" autocomplete="off" style="padding:10px 12px;font-size:16px"></div>
       <button class="btn btn-outline" id="addBtn" style="padding:12px;margin-top:4px">＋ 追加する</button>
     </div>
     <div class="add-panel" id="panel-csv">
@@ -774,7 +784,9 @@ function showLogin(){
 }
 
 /* ── STORAGE ── */
-const API = 'https://happylife32.com/kakeibo/api.php';
+const API = ['127.0.0.1','localhost'].includes(location.hostname)
+  ? `${location.origin}/api.php`
+  : 'https://happylife32.com/kakeibo/api.php';
 let _cache = null;
 
 function authHeaders(){ return {'Content-Type':'application/json','X-Auth-Token':getToken()}; }
@@ -788,9 +800,10 @@ async function fetchAll() {
   } catch { _cache={}; return {}; }
 }
 async function pushAll(data) {
+  const r=await fetch(API,{method:'POST',headers:authHeaders(),body:JSON.stringify(data)});
+  if(r.status===401){ showLogin(); throw new Error('unauthorized'); }
+  if(!r.ok) throw new Error(`save failed: ${r.status}`);
   _cache=data;
-  try { await fetch(API,{method:'POST',headers:authHeaders(),body:JSON.stringify(data)}); }
-  catch(e){console.error(e);}
 }
 async function load()   { const d=await fetchAll(); return d.db||{}; }
 async function save(d)  { const a=await fetchAll(); await pushAll({...a,db:d}); }
@@ -798,14 +811,15 @@ async function loadR()  { const d=await fetchAll(); return d.recur||[]; }
 async function saveR(d) { const a=await fetchAll(); await pushAll({...a,recur:d}); }
 async function loadB()  { const d=await fetchAll(); return d.budget||{}; }
 async function saveB(d) { const a=await fetchAll(); await pushAll({...a,budget:d}); }
+async function loadRecurDeleted() { const d=await fetchAll(); return d.recurDeleted||[]; }
 
 /* ── STATE ── */
-let DB={}, RECUR=[], BUDGET={}, cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
+let DB={}, RECUR=[], BUDGET={}, RECUR_DELETED=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
 
 /* ── INIT ── */
 async function initApp(){
   document.getElementById('totalAmt').textContent='読込中...';
-  DB=await load(); RECUR=await loadR(); BUDGET=await loadB();
+  DB=await load(); RECUR=await loadR(); BUDGET=await loadB(); RECUR_DELETED=await loadRecurDeleted();
   const now=new Date();
   cy=now.getFullYear(); cm=now.getMonth()+1;
   document.getElementById('m-date').value=now.toISOString().slice(0,10);
@@ -840,7 +854,7 @@ document.getElementById('refreshBtn').onclick=async()=>{
   const btn=document.getElementById('refreshBtn');
   btn.style.transform='rotate(360deg)';
   btn.style.transition='transform 0.5s';
-  DB=await load(); RECUR=await loadR();
+  DB=await load(); RECUR=await loadR(); BUDGET=await loadB(); RECUR_DELETED=await loadRecurDeleted();
   await applyRecurring();
   render();
   toast('更新しました','ok');
@@ -859,6 +873,8 @@ async function applyRecurring(){
     const day=Math.min(r.day, new Date(cy,cm,0).getDate());
     const date=`${cy}-${String(cm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     if(!DB[mkey(cy,cm)]) DB[mkey(cy,cm)]=[];
+    const deletionKey=`${r.id}:${mkey(cy,cm)}`;
+    if(RECUR_DELETED.includes(deletionKey)) return;
     const exists=DB[mkey(cy,cm)].some(it=>it.recurId===r.id&&it.date.slice(0,7)===mkey(cy,cm));
     if(!exists){
       DB[mkey(cy,cm)].push({id:Date.now()+Math.random(),recurId:r.id,shop:r.shop,amount:r.amount,date,category:r.category,memo:r.memo||'',source:'recur',type:r.type||'支出'});
@@ -956,11 +972,27 @@ function txHTML(filtered, allItems){
       <div class="tx-meta">${h(it.category)}${it.memo?' · '+h(it.memo):''}</div>
       <div class="tx-date-lbl">${it.date.slice(5).replace('-','/')}</div>
       <div style="position:absolute;right:12px;bottom:10px;display:flex;gap:6px">
+        ${it.receiptImage?`<button onclick="viewReceiptImage('${it.id}')" style="background:none;border:1px solid var(--border);color:var(--green);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">画像</button>`:''}
         <button onclick="editTx(${i})" style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">編集</button>
         <button onclick="del(${i})" style="background:none;border:1px solid var(--border);color:var(--accent2);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">削除</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function viewReceiptImage(id){
+  const item=cur().find(it=>String(it.id)===String(id));
+  if(!item?.receiptImage) return;
+  const bg=document.createElement('div');
+  bg.style.cssText='position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
+  const img=document.createElement('img');
+  img.src=item.receiptImage; img.alt='保存したレシート画像';
+  img.style.cssText='max-width:100%;max-height:90dvh;object-fit:contain;border-radius:12px;background:#fff;';
+  const close=document.createElement('button');
+  close.type='button'; close.textContent='✕'; close.setAttribute('aria-label','閉じる');
+  close.style.cssText='position:absolute;top:calc(env(safe-area-inset-top, 0px) + 16px);right:16px;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.92);color:#333;font-size:20px;cursor:pointer;';
+  close.onclick=()=>bg.remove(); bg.onclick=e=>{if(e.target===bg)bg.remove();};
+  bg.append(img,close); document.body.appendChild(bg);
 }
 
 function renderList(){
@@ -1540,57 +1572,109 @@ document.querySelectorAll('.add-tab').forEach(btn=>{
 });
 
 /* ── RECEIPT UPLOAD ── */
-let b64=null;
+let b64=null, receiptImageData=null, receiptMediaType='image/jpeg', lastReceiptFile=null;
 const dz=document.getElementById('dropZone'),fi=document.getElementById('fileInput');
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
 dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
 dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])readFile(e.dataTransfer.files[0]);});
 fi.addEventListener('change',()=>{if(fi.files[0])readFile(fi.files[0]);});
-function readFile(file){
-  const r=new FileReader();
-  r.onload=e=>{const url=e.target.result;b64=url.split(',')[1];document.getElementById('prevImg').src=url;document.getElementById('preview').style.display='block';document.getElementById('analyzeBtn').style.display='block';};
-  r.readAsDataURL(file);
+function setReceiptError(message){
+  const error=document.getElementById('receiptError');
+  error.textContent=message; error.style.display='block';
+  document.getElementById('receiptRetryBtn').style.display='block';
 }
-document.getElementById('removeImg').onclick=()=>{b64=null;document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';};
+function clearReceiptError(){
+  document.getElementById('receiptError').style.display='none';
+  document.getElementById('receiptRetryBtn').style.display='none';
+}
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error||new Error('画像を読み込めませんでした'));
+    reader.readAsDataURL(file);
+  });
+}
+function loadImage(url){
+  return new Promise((resolve,reject)=>{
+    const img=new Image(); img.onload=()=>resolve(img); img.onerror=()=>reject(new Error('画像を開けませんでした')); img.src=url;
+  });
+}
+async function optimizeReceiptImage(file){
+  const original=await fileToDataURL(file);
+  const img=await loadImage(original);
+  const maxSide=1600;
+  const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+  canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+  return canvas.toDataURL('image/jpeg',0.82);
+}
+async function readFile(file){
+  lastReceiptFile=file; clearReceiptError();
+  document.querySelector('#loadingBox .loading-txt').textContent='画像を準備中...';
+  document.getElementById('loadingBox').classList.add('on');
+  document.getElementById('analyzeBtn').style.display='none';
+  try{
+    const url=await optimizeReceiptImage(file);
+    receiptImageData=url;
+    receiptMediaType=(url.match(/^data:([^;]+);/)||[])[1]||'image/jpeg';
+    b64=url.split(',')[1];
+    document.getElementById('prevImg').src=url;
+    document.getElementById('preview').style.display='block';
+    document.getElementById('analyzeBtn').style.display='block';
+  }catch(e){
+    b64=null; receiptImageData=null;
+    setReceiptError('画像を読み込めませんでした。もう一度試してください。');
+    console.error(e);
+  }finally{
+    document.getElementById('loadingBox').classList.remove('on');
+    document.querySelector('#loadingBox .loading-txt').textContent='AIが解析中...';
+  }
+}
+document.getElementById('removeImg').onclick=()=>{b64=null;receiptImageData=null;lastReceiptFile=null;clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';};
 
 /* ── ANALYZE ── */
-document.getElementById('analyzeBtn').onclick=async()=>{
+async function analyzeReceipt(){
   if(!b64)return;
+  clearReceiptError();
   const btn=document.getElementById('analyzeBtn');
   btn.disabled=true;btn.style.display='none';
   document.getElementById('loadingBox').classList.add('on');
+  let succeeded=false;
   try{
     const today=new Date().toISOString().slice(0,10);
     let res;
     try{
-      res=await fetch('https://happylife32.com/kakeibo/api.php?action=analyze',{
+      res=await fetch(API+'?action=analyze',{
         method:'POST',headers:authHeaders(),
         body:JSON.stringify({messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          {type:'image',source:{type:'base64',media_type:receiptMediaType,data:b64}},
           {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":レシートに記載の合計金額（最重要・必ず正確に読み取る）}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\ntotalは合計欄の数字を使うこと。品目は参考程度でOK。JSONのみ。`}
         ]}]})
       });
     }catch(networkErr){
-      toast('通信エラー：ネットワークを確認してね','err');
+      setReceiptError('画像を送信できませんでした。通信状況を確認して、もう一度試してください。');
       return;
     }
 
     // HTTPステータスで原因を判別
     if(res.status===401){
-      toast('認証エラー(401)：再ログインしてね','err');
+      setReceiptError('認証の有効期限が切れました。再ログインしてください。');
       setTimeout(()=>showLogin(),1500);
       return;
     }
     if(res.status===405){
-      toast('サーバーエラー(405)：api.phpを確認してね','err');
+      setReceiptError('画像を送信できませんでした（405）。もう一度試してください。');
       return;
     }
     if(res.status===500){
-      toast('サーバーエラー(500)：Xサーバー側の問題かも','err');
+      setReceiptError('サーバーで画像を処理できませんでした。少し待ってから、もう一度試してください。');
       return;
     }
     if(!res.ok){
-      toast(`エラー(${res.status})：しばらく待ってから試してね','err`,'err');
+      setReceiptError(`画像を送信できませんでした（${res.status}）。もう一度試してください。`);
       return;
     }
 
@@ -1599,17 +1683,17 @@ document.getElementById('analyzeBtn').onclick=async()=>{
     // Anthropic API側のエラー
     if(data.error){
       const errType=data.error?.type||'unknown';
-      if(errType==='authentication_error') toast('APIキーが無効です：api.phpを確認してね','err');
-      else if(errType==='overloaded_error') toast('AIが混雑中(529)：少し待ってから試してね','err');
-      else if(errType==='rate_limit_error') toast('API制限中(429)：しばらく待ってから試してね','err');
-      else toast(`AI解析エラー(${errType})：もう一度試してね','err`,'err');
+      if(errType==='authentication_error') setReceiptError('画像解析の認証に失敗しました。');
+      else if(errType==='overloaded_error') setReceiptError('AIが混み合っています。少し待ってから、もう一度試してください。');
+      else if(errType==='rate_limit_error') setReceiptError('AIの利用制限中です。しばらく待ってから、もう一度試してください。');
+      else setReceiptError(`画像を解析できませんでした（${errType}）。もう一度試してください。`);
       return;
     }
 
     const txt=data.content?.[0]?.text||'';
     const m=txt.match(/\{[\s\S]*\}/);
     if(!m){
-      toast('解析結果を読み取れなかったよ。別の画像を試してね','err');
+      setReceiptError('解析結果を読み取れませんでした。もう一度試すか、別の画像を選んでください。');
       return;
     }
     const p=JSON.parse(m[0]);
@@ -1621,13 +1705,21 @@ document.getElementById('analyzeBtn').onclick=async()=>{
     const topCat = Object.entries(catCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || '食費';
     pending=[{shop:p.shop, date:p.date, amount:totalAmt, category:topCat, memo:'', source:'receipt', type:'支出'}];
     openModal(p);
+    succeeded=true;
   }catch(e){
-    toast('予期せぬエラーが発生しました','err');
+    setReceiptError('画像を解析できませんでした。もう一度試してください。');
     console.error(e);
   }finally{
     document.getElementById('loadingBox').classList.remove('on');
     btn.disabled=false;
+    if(!succeeded&&b64) document.getElementById('receiptRetryBtn').style.display='block';
   }
+}
+document.getElementById('analyzeBtn').onclick=analyzeReceipt;
+document.getElementById('receiptRetryBtn').onclick=()=>{
+  if(b64) analyzeReceipt();
+  else if(lastReceiptFile) readFile(lastReceiptFile);
+  else fi.click();
 };
 
 function openModal(p){
@@ -1652,10 +1744,11 @@ document.getElementById('modalSave').onclick=async()=>{
   const cat = document.getElementById('sc-0')?.value || pending[0]?.category || '食費';
   const it = pending[0];
   const key=mkey(cy,cm);if(!DB[key])DB[key]=[];
-  DB[key].push({id:Date.now()+Math.random(),shop:it.shop,date:it.date,amount:it.amount,category:cat,memo:'',source:'receipt',type:'支出'});
-  await save(DB);
+  DB[key].push({id:Date.now()+Math.random(),shop:it.shop,date:it.date,amount:it.amount,category:cat,memo:'',source:'receipt',type:'支出',receiptImage:receiptImageData});
+  try{ await save(DB); }
+  catch(e){ DB[key].pop(); setReceiptError('画像を含むデータを保存できませんでした。もう一度試してください。'); console.error(e); return; }
   document.getElementById('modalBg').classList.remove('on');
-  b64=null;document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
+  b64=null;receiptImageData=null;lastReceiptFile=null;clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
   render();toast('保存したよ！','ok');
 };
 
@@ -1793,7 +1886,18 @@ document.getElementById('csvImportBtn').onclick=async()=>{
 };
 
 /* ── DELETE ── */
-async function del(i){const key=mkey(cy,cm);DB[key].splice(i,1);await save(DB);render();toast('削除しました','ok');}
+async function del(i){
+  const key=mkey(cy,cm), item=DB[key]?.[i];
+  if(!item) return;
+  if(item.recurId){
+    const deletionKey=`${item.recurId}:${key}`;
+    if(!RECUR_DELETED.includes(deletionKey)) RECUR_DELETED.push(deletionKey);
+  }
+  DB[key].splice(i,1);
+  const all=await fetchAll();
+  await pushAll({...all,db:DB,recurDeleted:RECUR_DELETED});
+  render();toast('削除しました','ok');
+}
 
 /* ── TOAST ── */
 function toast(msg,type='ok'){
