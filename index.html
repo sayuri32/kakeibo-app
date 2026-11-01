@@ -296,6 +296,7 @@
   .sheet-actions { display: flex; gap: 10px; margin-top: 18px; }
   .sheet-cancel { flex: 1; padding: 14px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 12px; font-family: var(--font); font-size: 14px; cursor: pointer; touch-action: manipulation; }
   .sheet-save { flex: 2; padding: 14px; background: var(--accent); border: none; color: #fff; border-radius: 12px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+  .sheet-save:disabled { opacity: 0.55; cursor: wait; }
   .sheet-save:active { opacity: 0.85; }
 
   /* ════════════════════════
@@ -848,6 +849,23 @@ function mkey(y,m){return `${y}-${String(m).padStart(2,'0')}`;}
 function cur(){return DB[mkey(cy,cm)]||[];}
 function h(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+/* 保存中の連打による二重登録を防止 */
+function beginSaving(button, savingText='保存中...'){
+  if(!button||button.dataset.saving==='1') return false;
+  button.dataset.saving='1';
+  button.dataset.idleText=button.textContent;
+  button.disabled=true;
+  button.textContent=savingText;
+  return true;
+}
+function endSaving(button){
+  if(!button) return;
+  button.disabled=false;
+  button.textContent=button.dataset.idleText||'保存する';
+  delete button.dataset.saving;
+  delete button.dataset.idleText;
+}
+
 /* ── REFRESH ── */
 document.getElementById('refreshBtn').onclick=async()=>{
   _cache=null;
@@ -1202,6 +1220,8 @@ document.getElementById('recurModalSave').onclick=async()=>{
   const applyFrom=document.getElementById('r-applyfrom').value;
   if(!shop){toast('店名を入力してね','err');return;}
   if(!amount||amount<=0){toast('金額を入力してね','err');return;}
+  const btn=document.getElementById('recurModalSave');
+  if(!beginSaving(btn)) return;
 
   // 適用開始月を決定
   let startY=cy, startM=cm;
@@ -1217,8 +1237,15 @@ document.getElementById('recurModalSave').onclick=async()=>{
     shop,amount,day,category:cat,type,memo,active:true,
     startYear:startY, startMonth:startM
   };
+  const previousEntry=editRecurIdx!==null?RECUR[editRecurIdx]:null;
   if(editRecurIdx!==null)RECUR[editRecurIdx]=entry; else RECUR.push(entry);
-  await saveR(RECUR);
+  try{ await saveR(RECUR); }
+  catch(e){
+    if(editRecurIdx!==null) RECUR[editRecurIdx]=previousEntry; else RECUR.pop();
+    toast('保存できませんでした。もう一度試してね','err');
+    console.error(e);
+    return;
+  } finally { endSaving(btn); }
   document.getElementById('recurModalBg').classList.remove('on');
 
   // 適用開始月が現在月以前なら即適用
@@ -1377,23 +1404,33 @@ function detectRecurring(){
       <div style="background:var(--surface);border-radius:12px;padding:13px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
         <div style="flex:1"><div style="font-size:14px;font-weight:700">${h(c.shop)}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${h(c.category)} · ${c.months}ヶ月連続</div></div>
         <div style="font-size:14px;font-weight:700;color:var(--accent2);font-family:var(--mono);margin-right:8px">¥${c.amount.toLocaleString()}</div>
-        <button onclick="addSuggestion(${i})" style="background:var(--accent);border:none;color:#fff;font-family:var(--font);font-size:11px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;touch-action:manipulation">追加</button>
+        <button onclick="addSuggestion(${i},this)" style="background:var(--accent);border:none;color:#fff;font-family:var(--font);font-size:11px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;touch-action:manipulation">追加</button>
       </div>`).join('')}
-    <button onclick="addAllSuggestions()" style="width:100%;padding:12px;background:var(--surface);border:1.5px solid var(--accent);color:var(--accent);font-family:var(--font);font-size:13px;font-weight:700;border-radius:12px;cursor:pointer;touch-action:manipulation;margin-bottom:16px">✅ すべて追加する</button>`;
+    <button onclick="addAllSuggestions(this)" style="width:100%;padding:12px;background:var(--surface);border:1.5px solid var(--accent);color:var(--accent);font-family:var(--font);font-size:13px;font-weight:700;border-radius:12px;cursor:pointer;touch-action:manipulation;margin-bottom:16px">✅ すべて追加する</button>`;
   window._recurCandidates=candidates;
 }
-async function addSuggestion(i){
+async function addSuggestion(i,button){
   const c=window._recurCandidates[i];if(!c)return;
-  RECUR.push({id:Date.now()+Math.random(),shop:c.shop,amount:c.amount,day:1,category:c.category,type:'支出',memo:'',active:true});
-  await saveR(RECUR); await applyRecurring();
+  if(!beginSaving(button,'追加中...')) return;
+  const entry={id:Date.now()+Math.random(),shop:c.shop,amount:c.amount,day:1,category:c.category,type:'支出',memo:'',active:true};
+  RECUR.push(entry);
+  try{ await saveR(RECUR); }
+  catch(e){RECUR=RECUR.filter(r=>r.id!==entry.id);toast('追加できませんでした。もう一度試してね','err');console.error(e);endSaving(button);return;}
+  try{ await applyRecurring(); }catch(e){console.error(e);}
+  endSaving(button);
   window._recurCandidates.splice(i,1);
   detectRecurring(); renderRecur();
   toast(`「${c.shop}」を固定費に追加したよ！`,'ok');
 }
-async function addAllSuggestions(){
+async function addAllSuggestions(button){
   const candidates=window._recurCandidates||[];if(!candidates.length)return;
-  candidates.forEach(c=>{RECUR.push({id:Date.now()+Math.random(),shop:c.shop,amount:c.amount,day:1,category:c.category,type:'支出',memo:'',active:true});});
-  await saveR(RECUR); await applyRecurring();
+  if(!beginSaving(button,'追加中...')) return;
+  const entries=candidates.map(c=>({id:Date.now()+Math.random(),shop:c.shop,amount:c.amount,day:1,category:c.category,type:'支出',memo:'',active:true}));
+  RECUR.push(...entries);
+  try{ await saveR(RECUR); }
+  catch(e){const ids=new Set(entries.map(r=>r.id));RECUR=RECUR.filter(r=>!ids.has(r.id));toast('追加できませんでした。もう一度試してね','err');console.error(e);endSaving(button);return;}
+  try{ await applyRecurring(); }catch(e){console.error(e);}
+  endSaving(button);
   window._recurCandidates=[];
   document.getElementById('recurSuggestions').innerHTML='';
   renderRecur();
@@ -1741,12 +1778,15 @@ function openModal(p){
 document.getElementById('modalCancel').onclick=()=>document.getElementById('modalBg').classList.remove('on');
 document.getElementById('modalBg').onclick=e=>{if(e.target===document.getElementById('modalBg'))document.getElementById('modalBg').classList.remove('on');};
 document.getElementById('modalSave').onclick=async()=>{
+  const btn=document.getElementById('modalSave');
+  if(!beginSaving(btn)) return;
   const cat = document.getElementById('sc-0')?.value || pending[0]?.category || '食費';
   const it = pending[0];
   const key=mkey(cy,cm);if(!DB[key])DB[key]=[];
   DB[key].push({id:Date.now()+Math.random(),shop:it.shop,date:it.date,amount:it.amount,category:cat,memo:'',source:'receipt',type:'支出',receiptImage:receiptImageData});
   try{ await save(DB); }
   catch(e){ DB[key].pop(); setReceiptError('画像を含むデータを保存できませんでした。もう一度試してください。'); console.error(e); return; }
+  finally{ endSaving(btn); }
   document.getElementById('modalBg').classList.remove('on');
   b64=null;receiptImageData=null;lastReceiptFile=null;clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
   render();toast('保存したよ！','ok');
@@ -1763,9 +1803,13 @@ document.getElementById('addBtn').onclick=async()=>{
   if(!shop){toast('店名を入力してね','err');return;}
   if(!amount||amount<=0){toast('金額を入力してね','err');return;}
   if(!date){toast('日付を選んでね','err');return;}
+  const btn=document.getElementById('addBtn');
+  if(!beginSaving(btn,'登録中...')) return;
   const key=mkey(cy,cm);if(!DB[key])DB[key]=[];
   DB[key].push({id:Date.now(),shop,amount,date,category,memo,source:'manual',type});
-  await save(DB);
+  try{ await save(DB); }
+  catch(e){ DB[key].pop(); toast('保存できませんでした。もう一度試してね','err'); console.error(e); return; }
+  finally{ endSaving(btn); }
   document.getElementById('m-shop').value='';document.getElementById('m-amount').value='';document.getElementById('m-memo').value='';
   render();toast(`「${shop}」を追加したよ！`,'ok');
 };
@@ -1870,18 +1914,25 @@ function showCsvPreview(rows){
 document.getElementById('csvCancelBtn').onclick=()=>{csvParsed=[];document.getElementById('csvPreview').style.display='none';document.getElementById('csvDropZone').style.display='block';csvFi.value='';};
 document.getElementById('csvImportBtn').onclick=async()=>{
   const btn=document.getElementById('csvImportBtn');
-  btn.disabled=true;btn.textContent='保存中...';
+  if(!beginSaving(btn,'インポート中...')) return;
   let added=0;
+  const inserted=[];
   csvParsed.forEach(r=>{
     const [y,m]=r.date.slice(0,7).split('-');
     const k=mkey(parseInt(y),parseInt(m));
     if(!DB[k])DB[k]=[];
-    DB[k].push({id:Date.now()+Math.random(),shop:r.shop,amount:r.amount,date:r.date,category:r.category,memo:r.memo,source:'csv',type:r.type});
+    const item={id:Date.now()+Math.random(),shop:r.shop,amount:r.amount,date:r.date,category:r.category,memo:r.memo,source:'csv',type:r.type};
+    DB[k].push(item); inserted.push([k,item.id]);
     added++;
   });
-  await save(DB);
+  try{ await save(DB); }
+  catch(e){
+    inserted.forEach(([k,id])=>{DB[k]=DB[k].filter(item=>item.id!==id);});
+    toast('インポートできませんでした。もう一度試してね','err');
+    console.error(e);
+    return;
+  } finally { endSaving(btn); }
   csvParsed=[];document.getElementById('csvPreview').style.display='none';document.getElementById('csvDropZone').style.display='block';csvFi.value='';
-  btn.disabled=false;btn.textContent='まとめてインポートする';
   render();toast(`${added}件をインポートしたよ！`,'ok');
 };
 
