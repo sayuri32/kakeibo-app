@@ -222,6 +222,16 @@
   .fselect { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238888aa'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
   .fselect option { background: #fff; }
   .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .amount-calc-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 6px; }
+  .amount-calc-btn {
+    min-width: 0; min-height: 40px; padding: 5px 2px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: var(--mono); font-size: 16px; font-weight: 700;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .amount-calc-btn:active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .amount-calc-btn.amount-equals { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .amount-calc-hint { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.4; }
 
   /* ════════════════════════
      HISTORY
@@ -515,7 +525,7 @@
   <!-- ADD -->
   <div class="screen" id="screen-add">
     <div class="add-tabs">
-      <button class="add-tab active" data-tab="receipt">📷 レシート・PayPay</button>
+      <button class="add-tab active" data-tab="receipt">📷 画像・LINE</button>
       <button class="add-tab" data-tab="manual">✏️ 手動</button>
       <button class="add-tab" data-tab="csv">📂 CSV</button>
     </div>
@@ -523,8 +533,8 @@
       <div class="drop-zone" id="dropZone">
         <input type="file" id="fileInput" accept="image/*">
         <div class="drop-icon">🧾</div>
-        <div class="drop-hint">レシート・PayPay画面を選択</div>
-        <div class="drop-sub">レシート、通知、取引履歴一覧のスクショに対応<br>一覧は登録済みを除いてまとめて追加</div>
+        <div class="drop-hint">レシート・PayPay・LINE画像を選択</div>
+        <div class="drop-sub">LINEで届いた支払い連絡のスクショにも対応<br>一覧は登録済みを除いてまとめて追加</div>
       </div>
       <div id="preview"><img id="prevImg" src="" alt=""><button class="rm-btn" id="removeImg">✕</button></div>
       <div class="loading-box" id="loadingBox"><div class="spinner"></div><div class="loading-txt">AIが解析中...</div></div>
@@ -535,7 +545,7 @@
     <div class="add-panel" id="panel-manual">
       <div class="fg" style="margin-bottom:8px"><label class="flabel">店名 / サービス名</label><input class="finput" id="m-shop" type="text" placeholder="例：Netflix、スタバ" autocomplete="off" style="padding:10px 12px;font-size:16px"></div>
       <div class="frow" style="gap:8px">
-        <div class="fg" style="margin-bottom:8px"><label class="flabel">金額（円）</label><input class="finput" id="m-amount" type="number" placeholder="0" min="0" inputmode="numeric" style="padding:10px 12px;font-size:16px"></div>
+        <div class="fg" style="margin-bottom:8px"><label class="flabel">金額（円）</label><input class="finput" id="m-amount" type="text" placeholder="例：1200＋350" inputmode="decimal" data-amount-calc style="padding:10px 12px;font-size:16px"><div class="amount-calc-hint">計算式を入力できます</div></div>
         <div class="fg" style="margin-bottom:8px"><label class="flabel">日付</label><input class="finput" id="m-date" type="date" style="padding:10px 12px;font-size:16px"></div>
       </div>
       <div class="frow" style="gap:8px">
@@ -628,7 +638,7 @@
     <div class="sheet-title" id="recurModalTitle">固定費を追加 <em>🔄</em></div>
     <div class="fg"><label class="flabel">店名 / サービス名</label><input class="finput" id="r-shop" type="text" placeholder="例：docomo、家賃、Netflix" autocomplete="off"></div>
     <div class="frow">
-      <div class="fg"><label class="flabel">金額（円）</label><input class="finput" id="r-amount" type="number" placeholder="0" min="0" inputmode="numeric"></div>
+      <div class="fg"><label class="flabel">金額（円）</label><input class="finput" id="r-amount" type="text" placeholder="例：1200＋350" inputmode="decimal" data-amount-calc></div>
       <div class="fg"><label class="flabel">引落日</label><input class="finput" id="r-day" type="number" placeholder="1〜31" min="1" max="31" inputmode="numeric"></div>
     </div>
     <div class="fg"><label class="flabel">カテゴリ</label>
@@ -664,7 +674,7 @@
     <div class="sheet-handle"></div>
     <div class="sheet-title" id="instanceModalTitle">この月の固定費を編集 <em>✏️</em></div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;background:var(--surface2);padding:10px 12px;border-radius:8px">この月分だけ変更されます。元の設定は変わりません。</div>
-    <div class="fg"><label class="flabel">金額（円）</label><input class="finput" id="inst-amount" type="number" inputmode="numeric"></div>
+    <div class="fg"><label class="flabel">金額（円）</label><input class="finput" id="inst-amount" type="text" inputmode="decimal" data-amount-calc></div>
     <div class="fg"><label class="flabel">カテゴリ</label>
       <select class="fselect" id="inst-cat">
         <option>食費</option><option>外食費</option><option>日用品</option><option>サブスク</option>
@@ -713,7 +723,7 @@
     <div class="sheet-title">明細を編集 <em>✏️</em></div>
     <div class="fg"><label class="flabel">店名 / サービス名</label><input class="finput" id="te-shop" type="text" autocomplete="off"></div>
     <div class="frow">
-      <div class="fg"><label class="flabel">金額（円）</label><input class="finput" id="te-amount" type="number" inputmode="numeric"></div>
+      <div class="fg"><label class="flabel">金額（円）</label><input class="finput" id="te-amount" type="text" inputmode="decimal" data-amount-calc></div>
       <div class="fg"><label class="flabel">日付</label><input class="finput" id="te-date" type="date"></div>
     </div>
     <div class="fg"><label class="flabel">カテゴリ</label>
@@ -761,6 +771,80 @@ const RKEY   = 'kakeibo_recur';
 const BKEY   = 'kakeibo_budget'; // カテゴリ別予算
 const CATS   = ['食費','外食費','日用品','サブスク','交通/車','住居/通信','医療/美容','教育','服飾費','交遊費','保険','貯蓄','雑費'];
 const COLORS = ['#f4a7c0','#b8a9e8','#a8d8b0','#f9c784','#a8c8f0','#f4b8a0','#c8a8e8','#a8e0d8','#f4a0b8','#d4b8a8','#b8d8a8','#f0c8a0'];
+
+/* ── AMOUNT CALCULATOR ── */
+function calculateAmountExpression(raw){
+  let expr=String(raw??'').normalize('NFKC')
+    .replace(/[\s,￥¥円]/g,'').replace(/[×xX]/g,'*').replace(/÷/g,'/').replace(/[−ー―]/g,'-');
+  if(!expr||expr.length>100||!/^[0-9+\-*/().]+$/.test(expr)) return null;
+  let pos=0;
+  const skip=()=>{while(expr[pos]===' ')pos++;};
+  const number=()=>{
+    skip(); const start=pos; let dots=0;
+    while(pos<expr.length&&(/[0-9.]/).test(expr[pos])){if(expr[pos]==='.'&&++dots>1)throw Error();pos++;}
+    if(start===pos||expr.slice(start,pos)==='.') throw Error();
+    return Number(expr.slice(start,pos));
+  };
+  const factor=()=>{
+    skip();
+    if(expr[pos]==='+'){pos++;return factor();}
+    if(expr[pos]==='-'){pos++;return -factor();}
+    if(expr[pos]==='('){pos++;const value=sum();skip();if(expr[pos]!==')')throw Error();pos++;return value;}
+    return number();
+  };
+  const product=()=>{
+    let value=factor();
+    while(true){skip();const op=expr[pos];if(op!=='*'&&op!=='/')break;pos++;const rhs=factor();if(op==='/'&&rhs===0)throw Error();value=op==='*'?value*rhs:value/rhs;}
+    return value;
+  };
+  const sum=()=>{
+    let value=product();
+    while(true){skip();const op=expr[pos];if(op!=='+'&&op!=='-')break;pos++;const rhs=product();value=op==='+'?value+rhs:value-rhs;}
+    return value;
+  };
+  try{
+    const value=sum(); skip();
+    if(pos!==expr.length||!Number.isFinite(value)) return null;
+    const rounded=Math.round(value);
+    return Number.isSafeInteger(rounded)&&rounded>=0?rounded:null;
+  }catch{return null;}
+}
+
+function readAmountInput(id){
+  const input=document.getElementById(id);
+  const amount=calculateAmountExpression(input?.value);
+  if(amount===null){input?.focus();return NaN;}
+  input.value=String(amount);
+  return amount;
+}
+
+function insertAmountOperator(input,operator){
+  if(operator==='='){
+    const amount=calculateAmountExpression(input.value);
+    if(amount===null){toast('計算式を確認してね','err');input.focus();return;}
+    input.value=String(amount);input.focus();input.setSelectionRange(input.value.length,input.value.length);return;
+  }
+  const start=input.selectionStart??input.value.length;
+  const end=input.selectionEnd??start;
+  input.value=input.value.slice(0,start)+operator+input.value.slice(end);
+  const next=start+operator.length;
+  input.focus();input.setSelectionRange(next,next);
+}
+
+function setupAmountCalculators(){
+  document.querySelectorAll('input[data-amount-calc]').forEach(input=>{
+    if(input.nextElementSibling?.classList.contains('amount-calc-row')) return;
+    const row=document.createElement('div');row.className='amount-calc-row';row.setAttribute('aria-label','金額計算');
+    ['＋','−','×','÷','＝'].forEach(label=>{
+      const button=document.createElement('button');button.type='button';button.className='amount-calc-btn'+(label==='＝'?' amount-equals':'');button.textContent=label;
+      button.setAttribute('aria-label',label==='＝'?'計算する':label+'を入力');
+      button.addEventListener('click',()=>insertAmountOperator(input,label==='＋'?'+':label==='−'?'-':label==='＝'?'=':label));
+      row.appendChild(button);
+    });
+    input.insertAdjacentElement('afterend',row);
+    input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();insertAmountOperator(input,'=');}});
+  });
+}
 
 /* ── AUTH ── */
 const TOKEN_KEY = 'kakeibo_token';
@@ -1043,7 +1127,7 @@ function render(){
 }
 
 function srcBadge(src){
-  const map={'receipt':['badge-r','📷'],'paypay':['badge-c','PayPay'],'csv':['badge-c','📂'],'recur':['badge-rec','🔄'],'manual':['badge-m','✏️']};
+  const map={'receipt':['badge-r','📷'],'paypay':['badge-c','PayPay'],'line':['badge-c','LINE'],'csv':['badge-c','📂'],'recur':['badge-rec','🔄'],'manual':['badge-m','✏️']};
   const [cls,ico]=map[src]||['badge-m','✏️'];
   return `<span class="badge ${cls}">${ico}</span>`;
 }
@@ -1077,7 +1161,7 @@ function viewReceiptImage(id){
   const bg=document.createElement('div');
   bg.style.cssText='position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
   const img=document.createElement('img');
-  img.src=source; img.alt='保存したレシート・PayPay画像';
+  img.src=source; img.alt='保存したレシート・PayPay・LINE画像';
   img.style.cssText='max-width:100%;max-height:90dvh;object-fit:contain;border-radius:12px;background:#fff;';
   const close=document.createElement('button');
   close.type='button'; close.textContent='✕'; close.setAttribute('aria-label','閉じる');
@@ -1285,7 +1369,7 @@ document.getElementById('recurModalCancel').onclick=()=>document.getElementById(
 document.getElementById('recurModalBg').onclick=e=>{if(e.target===document.getElementById('recurModalBg'))document.getElementById('recurModalBg').classList.remove('on');};
 document.getElementById('recurModalSave').onclick=async()=>{
   const shop=document.getElementById('r-shop').value.trim();
-  const amount=parseInt(document.getElementById('r-amount').value);
+  const amount=readAmountInput('r-amount');
   const day=Math.min(Math.max(parseInt(document.getElementById('r-day').value)||1,1),31);
   const cat=document.getElementById('r-cat').value;
   const type=document.getElementById('r-type').value;
@@ -1344,7 +1428,7 @@ document.getElementById('instanceCancel').onclick=()=>document.getElementById('i
 document.getElementById('instanceModalBg').onclick=e=>{if(e.target===document.getElementById('instanceModalBg'))document.getElementById('instanceModalBg').classList.remove('on');};
 document.getElementById('instanceSave').onclick=async()=>{
   const key=mkey(cy,cm);
-  const amount=parseInt(document.getElementById('inst-amount').value);
+  const amount=readAmountInput('inst-amount');
   const cat=document.getElementById('inst-cat').value;
   const memo=document.getElementById('inst-memo').value.trim();
   if(!amount||amount<=0){toast('金額を入力してね','err');return;}
@@ -1391,11 +1475,14 @@ function _openTxEditModal(it){
 
 function convertToRecurFromEdit(){
   const shop   = document.getElementById('te-shop').value.trim();
-  const amount = parseInt(document.getElementById('te-amount').value);
+  const amount = readAmountInput('te-amount');
   const date   = document.getElementById('te-date').value;
   const cat    = document.getElementById('te-cat').value;
   const type   = document.getElementById('te-type').value;
   const memo   = document.getElementById('te-memo').value.trim();
+  if(!shop){toast('店名を入力してね','err');return;}
+  if(!amount||amount<=0){toast('金額を入力してね','err');return;}
+  if(!date){toast('日付を選んでね','err');return;}
   document.getElementById('txEditModalBg').classList.remove('on');
   editRecurIdx = null;
   document.getElementById('recurModalTitle').innerHTML = '固定費に登録 <em>🔄</em>';
@@ -1417,7 +1504,7 @@ document.getElementById('txEditSave').onclick = async()=>{
   const idx = DB[key]?.findIndex(x=>String(x.id)===String(editTxId));
   if(idx===-1||idx===undefined) return;
   const shop   = document.getElementById('te-shop').value.trim();
-  const amount = parseInt(document.getElementById('te-amount').value);
+  const amount = readAmountInput('te-amount');
   const date   = document.getElementById('te-date').value;
   const cat    = document.getElementById('te-cat').value;
   const type   = document.getElementById('te-type').value;
@@ -1765,6 +1852,30 @@ function filterNewPayPayTransactions(rows){
   });
   return {fresh,duplicates};
 }
+function lineSourceRef(item){
+  const occurred=item.occurredAt||item.date;
+  return `line-entry:${occurred}|${item.amount}|${normalizeShopName(item.shop)}|${item.type}`;
+}
+function filterNewLineTransactions(rows){
+  const existing=Object.values(DB).flat();
+  const existingRefs=new Set(existing.map(item=>item.sourceRef).filter(Boolean));
+  const usedExisting=new Set(),seenRefs=new Set(),fresh=[];
+  let duplicates=0;
+  rows.forEach(row=>{
+    const sourceRef=lineSourceRef(row);
+    if(existingRefs.has(sourceRef)||seenRefs.has(sourceRef)){duplicates++;return;}
+    const matchIndex=existing.findIndex((item,index)=>{
+      if(usedExisting.has(index)||item.type!==row.type||Number(item.amount)!==row.amount) return false;
+      if(normalizeShopName(item.shop)!==normalizeShopName(row.shop)) return false;
+      const existingOccurred=normalizeOccurredAt(item.occurredAt,item.date);
+      return row.occurredAt&&existingOccurred?row.occurredAt===existingOccurred:item.date===row.date;
+    });
+    if(matchIndex>=0){usedExisting.add(matchIndex);duplicates++;return;}
+    seenRefs.add(sourceRef);
+    fresh.push({...row,sourceRef});
+  });
+  return {fresh,duplicates};
+}
 async function optimizeReceiptImage(file){
   const original=await fileToDataURL(file);
   const img=await loadImage(original);
@@ -1817,7 +1928,7 @@ async function analyzeReceipt(){
         method:'POST',headers:authHeaders(),
         body:JSON.stringify({messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:receiptMediaType,data:b64}},
-          {type:'text',text:`この画像はレシート、またはPayPayの通知・取引履歴一覧スクリーンショットです。JSONのみで返答してください。\nPayPay画面なら、画面に見える「支払い」と「返金」を省略せず上から順にtransactionsへ入れる。チャージ、ポイント付与、送金、残高表示は除外する。\n{"documentType":"paypay","transactions":[{"shop":"店名・支払先","date":"YYYY-MM-DD","occurredAt":"YYYY-MM-DD HH:mm。時刻不明なら空文字","amount":正の数値,"category":"カテゴリ","type":"payment または refund","transactionId":"見える場合のみ。なければ空文字"}]}\n通常のレシートなら次の形式:\n{"documentType":"receipt","shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":支払合計金額,"category":"代表カテゴリ"}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\n金額と日時を最優先で正確に読むこと。年が表示されていない場合は${today.slice(0,4)}年、日付自体がなければ${today}。`}
+          {type:'text',text:`この画像はレシート、PayPayの通知・取引履歴一覧、またはLINEで届いた支払い連絡のスクリーンショットです。JSONのみで返答してください。\nPayPay画面なら、画面に見える「支払い」と「返金」を省略せず上から順にtransactionsへ入れる。チャージ、ポイント付与、送金、残高表示は除外する。\n{"documentType":"paypay","transactions":[{"shop":"店名・支払先","date":"YYYY-MM-DD","occurredAt":"YYYY-MM-DD HH:mm。時刻不明なら空文字","amount":正の数値,"category":"カテゴリ","type":"payment または refund","transactionId":"見える場合のみ。なければ空文字"}]}\nLINE画面なら、会話中に書かれた購入・支払い・返金・収入の連絡だけを上から順にtransactionsへ入れ、雑談や合計だけの重複記載は除外する。店名がなければ内容を短い店名として使う。メッセージ時刻はoccurredAtに使い、取引日が書かれていればその日付を優先する。\n{"documentType":"line","transactions":[{"shop":"店名または支払い内容","date":"YYYY-MM-DD","occurredAt":"YYYY-MM-DD HH:mm。時刻不明なら空文字","amount":正の数値,"category":"カテゴリ","type":"payment または refund","memo":"元メッセージの短い要約"}]}\n通常のレシートなら次の形式:\n{"documentType":"receipt","shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":支払合計金額,"category":"代表カテゴリ"}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\n金額と日時を最優先で正確に読むこと。年が表示されていない場合は${today.slice(0,4)}年、日付自体がなければ${today}。`}
         ]}]})
       });
     }catch(networkErr){
@@ -1864,22 +1975,24 @@ async function analyzeReceipt(){
     }
     const p=JSON.parse(m[0]);
     const isPayPay=p.documentType==='paypay';
+    const isLine=p.documentType==='line';
     receiptDuplicateCount=0;
-    if(isPayPay){
+    if(isPayPay||isLine){
       const normalized=(Array.isArray(p.transactions)?p.transactions:[]).slice(0,50).map(row=>{
         const date=parseAnyDate(row.date||row.occurredAt)||today;
         const amount=parseInt(String(row.amount||'').replace(/[^0-9]/g,''),10)||0;
-        const shop=String(row.shop||'PayPay').trim()||'PayPay';
-        const type=String(row.type||'payment').toLowerCase()==='refund'?'収入':'支出';
+        const shop=String(row.shop||(isPayPay?'PayPay':'LINE支払い')).trim()||(isPayPay?'PayPay':'LINE支払い');
+        const rowType=String(row.type||'payment').toLowerCase();
+        const type=['refund','income','収入'].includes(rowType)?'収入':'支出';
         return {
           shop,date,occurredAt:normalizeOccurredAt(row.occurredAt,date),amount,
           category:CATS.includes(row.category)?row.category:inferCategoryForShop(shop,'雑費'),
-          memo:type==='収入'?'PayPay返金':'',source:'paypay',type,
+          memo:isLine?String(row.memo||'LINEから登録').trim():(type==='収入'?'PayPay返金':''),source:isLine?'line':'paypay',type,
           paypayTransactionId:String(row.transactionId||'').trim()
         };
       }).filter(row=>row.amount>0);
       if(!normalized.length) throw new Error('支払いを読み取れませんでした');
-      const filtered=filterNewPayPayTransactions(normalized);
+      const filtered=isLine?filterNewLineTransactions(normalized):filterNewPayPayTransactions(normalized);
       pending=filtered.fresh; receiptDuplicateCount=filtered.duplicates;
       if(!pending.length){
         setReceiptError(`画面内の${receiptDuplicateCount}件はすべて登録済みです。`);
@@ -1922,8 +2035,10 @@ document.getElementById('receiptRetryBtn').onclick=()=>{
 
 function openModal(p){
   const isPayPay=pending[0]?.source==='paypay';
-  document.getElementById('sheetInfo').textContent=isPayPay
-    ? `PayPay · 未登録 ${pending.length}件${receiptDuplicateCount?`（登録済み ${receiptDuplicateCount}件を除外）`:''}`
+  const isLine=pending[0]?.source==='line';
+  const isBatch=isPayPay||isLine;
+  document.getElementById('sheetInfo').textContent=isBatch
+    ? `${isLine?'LINE':'PayPay'} · 未登録 ${pending.length}件${receiptDuplicateCount?`（登録済み ${receiptDuplicateCount}件を除外）`:''}`
     : `レシート · 📍 ${pending[0].shop} · ${pending[0].date}`;
   document.getElementById('sheetItems').innerHTML=pending.map((it,index)=>`
     <div class="sheet-item">
@@ -1934,9 +2049,9 @@ function openModal(p){
       </div>
     </div>`).join('')+`
     <div style="font-size:11px;color:var(--muted);margin-top:8px;padding:8px 0;border-top:1px solid var(--border)">
-      ${isPayPay?'📱 未登録の明細だけをまとめて登録します':'📋 レシート内 '+(p.items?.length||0)+'品目 → 合計金額で1件登録'}
+      ${isBatch?`📱 ${isLine?'LINE内':'未登録'}の明細だけをまとめて登録します`:'📋 レシート内 '+(p.items?.length||0)+'品目 → 合計金額で1件登録'}
     </div>`;
-  document.getElementById('modalSave').textContent=isPayPay?`${pending.length}件を保存する`:'保存する';
+  document.getElementById('modalSave').textContent=isBatch?`${pending.length}件を保存する`:'保存する';
   document.getElementById('modalBg').classList.add('on');
 }
 document.getElementById('modalCancel').onclick=()=>document.getElementById('modalBg').classList.remove('on');
@@ -1978,7 +2093,7 @@ document.getElementById('modalSave').onclick=async()=>{
 /* ── MANUAL ADD ── */
 document.getElementById('addBtn').onclick=async()=>{
   const shop=document.getElementById('m-shop').value.trim();
-  const amount=parseInt(document.getElementById('m-amount').value);
+  const amount=readAmountInput('m-amount');
   const date=document.getElementById('m-date').value;
   const category=document.getElementById('m-cat').value;
   const type=document.getElementById('m-type').value;
@@ -2221,6 +2336,7 @@ function toast(msg,type='ok'){
 }
 
 /* ── PWA キャッシュ無効化 ── */
+setupAmountCalculators();
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(regs=>{regs.forEach(reg=>reg.unregister());});
   caches.keys().then(keys=>{keys.forEach(key=>caches.delete(key));});
