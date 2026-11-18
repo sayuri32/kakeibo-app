@@ -406,6 +406,9 @@
     <button onclick="doLogin()" style="width:100%;padding:14px;background:linear-gradient(135deg,#e8639a,#d45490);border:none;border-radius:12px;color:white;font-family:var(--font);font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(232,99,154,0.3)">
       ログイン
     </button>
+    <button id="startupRetryBtn" onclick="location.reload()" style="display:none;width:100%;margin-top:10px;padding:12px;background:white;border:1px solid #f0d0dc;border-radius:12px;color:#e8639a;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer">
+      ↻ データを再読み込み
+    </button>
   </div>
 </div>
 
@@ -512,16 +515,16 @@
   <!-- ADD -->
   <div class="screen" id="screen-add">
     <div class="add-tabs">
-      <button class="add-tab active" data-tab="receipt">📷 レシート</button>
+      <button class="add-tab active" data-tab="receipt">📷 レシート・PayPay</button>
       <button class="add-tab" data-tab="manual">✏️ 手動</button>
       <button class="add-tab" data-tab="csv">📂 CSV</button>
     </div>
     <div class="add-panel active" id="panel-receipt">
       <div class="drop-zone" id="dropZone">
-        <input type="file" id="fileInput" accept="image/*" capture="environment">
+        <input type="file" id="fileInput" accept="image/*">
         <div class="drop-icon">🧾</div>
-        <div class="drop-hint">タップして写真を撮影</div>
-        <div class="drop-sub">またはギャラリーから選択</div>
+        <div class="drop-hint">レシート・PayPay画面を選択</div>
+        <div class="drop-sub">レシート、通知、取引履歴一覧のスクショに対応<br>一覧は登録済みを除いてまとめて追加</div>
       </div>
       <div id="preview"><img id="prevImg" src="" alt=""><button class="rm-btn" id="removeImg">✕</button></div>
       <div class="loading-box" id="loadingBox"><div class="spinner"></div><div class="loading-txt">AIが解析中...</div></div>
@@ -555,10 +558,11 @@
         <input type="file" id="csvFileInput" accept=".csv,.xlsx,.xls">
         <div class="drop-icon">📂</div>
         <div class="drop-hint">ファイルをタップして選択</div>
-        <div class="drop-sub">Excel(.xlsx) · CSV対応</div>
+        <div class="drop-sub">PayPay公式CSV・Excel・一般CSVに対応</div>
       </div>
       <div class="loading-box" id="csvLoadingBox"><div class="spinner"></div><div class="loading-txt">読み込み中...</div></div>
       <div id="csvPreview" style="display:none">
+        <div id="csvFormatLabel" style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px"></div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px;background:var(--surface2);padding:10px 12px;border-radius:8px" id="csvSummary"></div>
         <div id="csvPreviewList" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px"></div>
         <button class="btn btn-solid" id="csvImportBtn">まとめてインポートする</button>
@@ -768,6 +772,7 @@ async function doLogin(){
   const pw=document.getElementById('loginPassword').value;
   const err=document.getElementById('loginError');
   err.style.display='none';
+  document.getElementById('startupRetryBtn').style.display='none';
   try{
     const res=await fetch(API+'?action=login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
     const data=await res.json();
@@ -776,11 +781,23 @@ async function doLogin(){
       document.getElementById('loginScreen').style.display='none';
       await initApp();
     } else { err.style.display='block'; }
-  } catch { err.style.display='block'; }
+  } catch {
+    showStartupError();
+  }
 }
 
 function showLogin(){
   _cache=null; clearToken();
+  document.getElementById('loginError').textContent='パスワードが違います';
+  document.getElementById('startupRetryBtn').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+
+function showStartupError(){
+  const err=document.getElementById('loginError');
+  err.textContent='データを読み込めませんでした。安全のため登録を停止しています。';
+  err.style.display='block';
+  document.getElementById('startupRetryBtn').style.display='block';
   document.getElementById('loginScreen').style.display='flex';
 }
 
@@ -790,20 +807,67 @@ const API = ['127.0.0.1','localhost'].includes(location.hostname)
   : 'https://happylife32.com/kakeibo/api.php';
 let _cache = null;
 
-function authHeaders(){ return {'Content-Type':'application/json','X-Auth-Token':getToken()}; }
+function authHeaders(extra={}){ return {'Content-Type':'application/json','X-Auth-Token':getToken(),...extra}; }
+
+function validDataShape(data){
+  return data&&typeof data==='object'&&!Array.isArray(data)
+    && data.db&&typeof data.db==='object'&&!Array.isArray(data.db)
+    && Array.isArray(data.recur)
+    && data.budget&&typeof data.budget==='object'&&!Array.isArray(data.budget)
+    && Array.isArray(data.recurDeleted);
+}
+
+function criticalSaveError(message){
+  _cache=null;
+  toast(message,'err');
+  setTimeout(()=>location.reload(),2200);
+}
 
 async function fetchAll() {
   if(_cache) return _cache;
   try {
     const r=await fetch(API+'?t='+Date.now(),{headers:{'X-Auth-Token':getToken()}});
-    if(r.status===401){ showLogin(); return {}; }
-    _cache=await r.json(); return _cache;
-  } catch { _cache={}; return {}; }
+    if(r.status===401){ showLogin(); const e=new Error('unauthorized');e.code='unauthorized';throw e; }
+    if(!r.ok) throw new Error(`load failed: ${r.status}`);
+    const data=await r.json();
+    const revision=r.headers.get('X-Data-Revision');
+    if(!validDataShape(data)||!revision) throw new Error('invalid or unsafe data response');
+    data._revision=revision;
+    _cache=data;
+    return _cache;
+  } catch(e) {
+    _cache=null;
+    throw e;
+  }
 }
 async function pushAll(data) {
-  const r=await fetch(API,{method:'POST',headers:authHeaders(),body:JSON.stringify(data)});
+  const revision=data?._revision||_cache?._revision||'';
+  if(!revision){
+    criticalSaveError('最新データを確認できないため保存を止めました。再読み込みします。');
+    const e=new Error('revision required');e.code='revision_required';throw e;
+  }
+  const payload={...data};
+  delete payload._revision;
+  let r;
+  try{
+    r=await fetch(API,{method:'POST',headers:authHeaders({'X-Data-Revision':revision}),body:JSON.stringify(payload)});
+  }catch(e){
+    throw new Error('network save failed');
+  }
   if(r.status===401){ showLogin(); throw new Error('unauthorized'); }
+  const result=await r.json().catch(()=>({}));
+  if(r.status===409||r.status===428){
+    criticalSaveError('別の端末で更新されたため保存を止めました。最新データを読み込みます。');
+    const e=new Error(result.code||'revision conflict');e.code=result.code||'revision_conflict';throw e;
+  }
+  if(r.status===422){
+    criticalSaveError('大量のデータが消える保存を検知したため停止しました。');
+    const e=new Error(result.code||'data loss blocked');e.code=result.code||'data_loss_blocked';throw e;
+  }
   if(!r.ok) throw new Error(`save failed: ${r.status}`);
+  const newRevision=r.headers.get('X-Data-Revision')||result.revision;
+  if(!newRevision) throw new Error('save verification failed');
+  data._revision=newRevision;
   _cache=data;
 }
 async function load()   { const d=await fetchAll(); return d.db||{}; }
@@ -815,12 +879,13 @@ async function saveB(d) { const a=await fetchAll(); await pushAll({...a,budget:d
 async function loadRecurDeleted() { const d=await fetchAll(); return d.recurDeleted||[]; }
 
 /* ── STATE ── */
-let DB={}, RECUR=[], BUDGET={}, RECUR_DELETED=[], cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
+let DB={}, RECUR=[], BUDGET={}, RECUR_DELETED=[], IMAGES={}, cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
 
 /* ── INIT ── */
 async function initApp(){
   document.getElementById('totalAmt').textContent='読込中...';
-  DB=await load(); RECUR=await loadR(); BUDGET=await loadB(); RECUR_DELETED=await loadRecurDeleted();
+  const all=await fetchAll();
+  DB=all.db||{}; RECUR=all.recur||[]; BUDGET=all.budget||{}; RECUR_DELETED=all.recurDeleted||[]; IMAGES=all.images||{};
   const now=new Date();
   cy=now.getFullYear(); cm=now.getMonth()+1;
   document.getElementById('m-date').value=now.toISOString().slice(0,10);
@@ -832,13 +897,12 @@ async function initApp(){
 // 起動時：トークンあれば即アプリ、なければログイン画面
 (async()=>{
   if(getToken()){
-    // トークン有効性確認
-    const r = await fetch(API+'?t='+Date.now(),{headers:{'X-Auth-Token':getToken()}});
-    if(r.status===401){
-      showLogin();
-    } else {
+    try{
+      await fetchAll();
       document.getElementById('loginScreen').style.display='none';
       await initApp();
+    }catch(e){
+      if(e.code!=='unauthorized') showStartupError();
     }
   } else {
     showLogin();
@@ -848,6 +912,7 @@ async function initApp(){
 function mkey(y,m){return `${y}-${String(m).padStart(2,'0')}`;}
 function cur(){return DB[mkey(cy,cm)]||[];}
 function h(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function makeId(){return globalThis.crypto?.randomUUID?globalThis.crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;}
 
 /* 保存中の連打による二重登録を防止 */
 function beginSaving(button, savingText='保存中...'){
@@ -872,11 +937,18 @@ document.getElementById('refreshBtn').onclick=async()=>{
   const btn=document.getElementById('refreshBtn');
   btn.style.transform='rotate(360deg)';
   btn.style.transition='transform 0.5s';
-  DB=await load(); RECUR=await loadR(); BUDGET=await loadB(); RECUR_DELETED=await loadRecurDeleted();
-  await applyRecurring();
-  render();
-  toast('更新しました','ok');
-  setTimeout(()=>{btn.style.transform='';btn.style.transition='';},600);
+  try{
+    const all=await fetchAll();
+    DB=all.db||{}; RECUR=all.recur||[]; BUDGET=all.budget||{}; RECUR_DELETED=all.recurDeleted||[]; IMAGES=all.images||{};
+    await applyRecurring();
+    render();
+    toast('更新しました','ok');
+  }catch(e){
+    toast('データを読み込めませんでした','err');
+    console.error(e);
+  }finally{
+    setTimeout(()=>{btn.style.transform='';btn.style.transition='';},600);
+  }
 };
 
 /* ── AUTO-APPLY RECURRING ── */
@@ -895,7 +967,7 @@ async function applyRecurring(){
     if(RECUR_DELETED.includes(deletionKey)) return;
     const exists=DB[mkey(cy,cm)].some(it=>it.recurId===r.id&&it.date.slice(0,7)===mkey(cy,cm));
     if(!exists){
-      DB[mkey(cy,cm)].push({id:Date.now()+Math.random(),recurId:r.id,shop:r.shop,amount:r.amount,date,category:r.category,memo:r.memo||'',source:'recur',type:r.type||'支出'});
+      DB[mkey(cy,cm)].push({id:makeId(),recurId:r.id,shop:r.shop,amount:r.amount,date,category:r.category,memo:r.memo||'',source:'recur',type:r.type||'支出'});
       changed=true;
     }
   });
@@ -971,7 +1043,7 @@ function render(){
 }
 
 function srcBadge(src){
-  const map={'receipt':['badge-r','📷'],'csv':['badge-c','📂'],'recur':['badge-rec','🔄'],'manual':['badge-m','✏️']};
+  const map={'receipt':['badge-r','📷'],'paypay':['badge-c','PayPay'],'csv':['badge-c','📂'],'recur':['badge-rec','🔄'],'manual':['badge-m','✏️']};
   const [cls,ico]=map[src]||['badge-m','✏️'];
   return `<span class="badge ${cls}">${ico}</span>`;
 }
@@ -990,7 +1062,7 @@ function txHTML(filtered, allItems){
       <div class="tx-meta">${h(it.category)}${it.memo?' · '+h(it.memo):''}</div>
       <div class="tx-date-lbl">${it.date.slice(5).replace('-','/')}</div>
       <div style="position:absolute;right:12px;bottom:10px;display:flex;gap:6px">
-        ${it.receiptImage?`<button onclick="viewReceiptImage('${it.id}')" style="background:none;border:1px solid var(--border);color:var(--green);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">画像</button>`:''}
+        ${(it.receiptImage||(it.receiptImageRef&&IMAGES[it.receiptImageRef]))?`<button onclick="viewReceiptImage('${it.id}')" style="background:none;border:1px solid var(--border);color:var(--green);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">画像</button>`:''}
         <button onclick="editTx(${i})" style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">編集</button>
         <button onclick="del(${i})" style="background:none;border:1px solid var(--border);color:var(--accent2);border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;touch-action:manipulation">削除</button>
       </div>
@@ -1000,11 +1072,12 @@ function txHTML(filtered, allItems){
 
 function viewReceiptImage(id){
   const item=cur().find(it=>String(it.id)===String(id));
-  if(!item?.receiptImage) return;
+  const source=item?.receiptImage||(item?.receiptImageRef&&IMAGES[item.receiptImageRef]);
+  if(!source) return;
   const bg=document.createElement('div');
   bg.style.cssText='position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:20px;';
   const img=document.createElement('img');
-  img.src=item.receiptImage; img.alt='保存したレシート画像';
+  img.src=source; img.alt='保存したレシート・PayPay画像';
   img.style.cssText='max-width:100%;max-height:90dvh;object-fit:contain;border-radius:12px;background:#fff;';
   const close=document.createElement('button');
   close.type='button'; close.textContent='✕'; close.setAttribute('aria-label','閉じる');
@@ -1233,7 +1306,7 @@ document.getElementById('recurModalSave').onclick=async()=>{
   }
 
   const entry={
-    id:editRecurIdx!==null?RECUR[editRecurIdx].id:Date.now(),
+    id:editRecurIdx!==null?RECUR[editRecurIdx].id:makeId(),
     shop,amount,day,category:cat,type,memo,active:true,
     startYear:startY, startMonth:startM
   };
@@ -1412,7 +1485,7 @@ function detectRecurring(){
 async function addSuggestion(i,button){
   const c=window._recurCandidates[i];if(!c)return;
   if(!beginSaving(button,'追加中...')) return;
-  const entry={id:Date.now()+Math.random(),shop:c.shop,amount:c.amount,day:1,category:c.category,type:'支出',memo:'',active:true};
+  const entry={id:makeId(),shop:c.shop,amount:c.amount,day:1,category:c.category,type:'支出',memo:'',active:true};
   RECUR.push(entry);
   try{ await saveR(RECUR); }
   catch(e){RECUR=RECUR.filter(r=>r.id!==entry.id);toast('追加できませんでした。もう一度試してね','err');console.error(e);endSaving(button);return;}
@@ -1425,7 +1498,7 @@ async function addSuggestion(i,button){
 async function addAllSuggestions(button){
   const candidates=window._recurCandidates||[];if(!candidates.length)return;
   if(!beginSaving(button,'追加中...')) return;
-  const entries=candidates.map(c=>({id:Date.now()+Math.random(),shop:c.shop,amount:c.amount,day:1,category:c.category,type:'支出',memo:'',active:true}));
+  const entries=candidates.map(c=>({id:makeId(),shop:c.shop,amount:c.amount,day:1,category:c.category,type:'支出',memo:'',active:true}));
   RECUR.push(...entries);
   try{ await saveR(RECUR); }
   catch(e){const ids=new Set(entries.map(r=>r.id));RECUR=RECUR.filter(r=>!ids.has(r.id));toast('追加できませんでした。もう一度試してね','err');console.error(e);endSaving(button);return;}
@@ -1609,7 +1682,7 @@ document.querySelectorAll('.add-tab').forEach(btn=>{
 });
 
 /* ── RECEIPT UPLOAD ── */
-let b64=null, receiptImageData=null, receiptMediaType='image/jpeg', lastReceiptFile=null;
+let b64=null, receiptImageData=null, receiptMediaType='image/jpeg', lastReceiptFile=null, imageFingerprint=null, receiptDuplicateCount=0;
 const dz=document.getElementById('dropZone'),fi=document.getElementById('fileInput');
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
 dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
@@ -1637,6 +1710,61 @@ function loadImage(url){
     const img=new Image(); img.onload=()=>resolve(img); img.onerror=()=>reject(new Error('画像を開けませんでした')); img.src=url;
   });
 }
+async function sha256Text(text){
+  if(!globalThis.crypto?.subtle) return '';
+  const hash=await globalThis.crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(hash),b=>b.toString(16).padStart(2,'0')).join('');
+}
+function normalizeShopName(value){
+  return String(value||'').normalize('NFKC').toLowerCase().replace(/[\s　]/g,'').replace(/[・･]/g,'');
+}
+function inferCategoryForShop(shop,fallback='雑費'){
+  const target=normalizeShopName(shop);
+  if(!target) return fallback;
+  const counts={};
+  Object.values(DB).flat().forEach(item=>{
+    if(normalizeShopName(item.shop)===target&&CATS.includes(item.category)){
+      counts[item.category]=(counts[item.category]||0)+1;
+    }
+  });
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0]||fallback;
+}
+function hasSourceReference(sourceRef){
+  if(!sourceRef) return false;
+  return Object.values(DB).flat().some(item=>item.sourceRef===sourceRef);
+}
+function normalizeOccurredAt(value,date=''){
+  const raw=String(value||'').normalize('NFKC').trim();
+  const match=raw.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})[^0-9]*(\d{1,2}):(\d{2})/);
+  if(match) return `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')} ${match[4].padStart(2,'0')}:${match[5]}`;
+  const time=raw.match(/(\d{1,2}):(\d{2})/);
+  return time&&date?`${date} ${time[1].padStart(2,'0')}:${time[2]}`:'';
+}
+function payPaySourceRef(item){
+  if(item.paypayTransactionId) return `paypay:${item.paypayTransactionId}`;
+  const occurred=item.occurredAt||item.date;
+  return `paypay-entry:${occurred}|${item.amount}|${normalizeShopName(item.shop)}`;
+}
+function filterNewPayPayTransactions(rows){
+  const existing=Object.values(DB).flat();
+  const existingRefs=new Set(existing.map(item=>item.sourceRef).filter(Boolean));
+  const usedExisting=new Set(),seenRefs=new Set(),fresh=[];
+  let duplicates=0;
+  rows.forEach(row=>{
+    const sourceRef=payPaySourceRef(row);
+    if(existingRefs.has(sourceRef)||seenRefs.has(sourceRef)){duplicates++;return;}
+    const matchIndex=existing.findIndex((item,index)=>{
+      if(usedExisting.has(index)||item.type!==row.type||Number(item.amount)!==row.amount) return false;
+      if(normalizeShopName(item.shop)!==normalizeShopName(row.shop)) return false;
+      const existingOccurred=normalizeOccurredAt(item.occurredAt,item.date);
+      return row.occurredAt&&existingOccurred?row.occurredAt===existingOccurred:item.date===row.date;
+    });
+    if(matchIndex>=0){usedExisting.add(matchIndex);duplicates++;return;}
+    seenRefs.add(sourceRef);
+    fresh.push({...row,sourceRef});
+  });
+  return {fresh,duplicates};
+}
 async function optimizeReceiptImage(file){
   const original=await fileToDataURL(file);
   const img=await loadImage(original);
@@ -1649,20 +1777,21 @@ async function optimizeReceiptImage(file){
   return canvas.toDataURL('image/jpeg',0.82);
 }
 async function readFile(file){
-  lastReceiptFile=file; clearReceiptError();
+  lastReceiptFile=file; pending=[]; receiptDuplicateCount=0; clearReceiptError();
   document.querySelector('#loadingBox .loading-txt').textContent='画像を準備中...';
   document.getElementById('loadingBox').classList.add('on');
   document.getElementById('analyzeBtn').style.display='none';
   try{
     const url=await optimizeReceiptImage(file);
     receiptImageData=url;
+    imageFingerprint=await sha256Text(url);
     receiptMediaType=(url.match(/^data:([^;]+);/)||[])[1]||'image/jpeg';
     b64=url.split(',')[1];
     document.getElementById('prevImg').src=url;
     document.getElementById('preview').style.display='block';
     document.getElementById('analyzeBtn').style.display='block';
   }catch(e){
-    b64=null; receiptImageData=null;
+    b64=null; receiptImageData=null; imageFingerprint=null;
     setReceiptError('画像を読み込めませんでした。もう一度試してください。');
     console.error(e);
   }finally{
@@ -1670,7 +1799,7 @@ async function readFile(file){
     document.querySelector('#loadingBox .loading-txt').textContent='AIが解析中...';
   }
 }
-document.getElementById('removeImg').onclick=()=>{b64=null;receiptImageData=null;lastReceiptFile=null;clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';};
+document.getElementById('removeImg').onclick=()=>{b64=null;receiptImageData=null;lastReceiptFile=null;imageFingerprint=null;receiptDuplicateCount=0;pending=[];clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';};
 
 /* ── ANALYZE ── */
 async function analyzeReceipt(){
@@ -1688,7 +1817,7 @@ async function analyzeReceipt(){
         method:'POST',headers:authHeaders(),
         body:JSON.stringify({messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:receiptMediaType,data:b64}},
-          {type:'text',text:`このレシートをJSON形式のみで返答:\n{"shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":レシートに記載の合計金額（最重要・必ず正確に読み取る）}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\ntotalは合計欄の数字を使うこと。品目は参考程度でOK。JSONのみ。`}
+          {type:'text',text:`この画像はレシート、またはPayPayの通知・取引履歴一覧スクリーンショットです。JSONのみで返答してください。\nPayPay画面なら、画面に見える「支払い」と「返金」を省略せず上から順にtransactionsへ入れる。チャージ、ポイント付与、送金、残高表示は除外する。\n{"documentType":"paypay","transactions":[{"shop":"店名・支払先","date":"YYYY-MM-DD","occurredAt":"YYYY-MM-DD HH:mm。時刻不明なら空文字","amount":正の数値,"category":"カテゴリ","type":"payment または refund","transactionId":"見える場合のみ。なければ空文字"}]}\n通常のレシートなら次の形式:\n{"documentType":"receipt","shop":"店名","date":"YYYY-MM-DD(不明なら${today})","items":[{"name":"品目","amount":数値,"category":"カテゴリ"}],"total":支払合計金額,"category":"代表カテゴリ"}\nカテゴリ:食費,外食費,日用品,サブスク,交通/車,住居/通信,医療/美容,教育,服飾費,交遊費,保険,貯蓄,雑費\n金額と日時を最優先で正確に読むこと。年が表示されていない場合は${today.slice(0,4)}年、日付自体がなければ${today}。`}
         ]}]})
       });
     }catch(networkErr){
@@ -1734,13 +1863,45 @@ async function analyzeReceipt(){
       return;
     }
     const p=JSON.parse(m[0]);
-    // 合計金額1件として登録（品目の積み上げではなくtotalを使う）
-    const totalAmt = p.total || (p.items||[]).reduce((s,i)=>s+(i.amount||0),0);
-    // カテゴリは品目の中で最多のものを採用（なければ食費）
-    const catCount={};
-    (p.items||[]).forEach(it=>{ catCount[it.category]=(catCount[it.category]||0)+1; });
-    const topCat = Object.entries(catCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || '食費';
-    pending=[{shop:p.shop, date:p.date, amount:totalAmt, category:topCat, memo:'', source:'receipt', type:'支出'}];
+    const isPayPay=p.documentType==='paypay';
+    receiptDuplicateCount=0;
+    if(isPayPay){
+      const normalized=(Array.isArray(p.transactions)?p.transactions:[]).slice(0,50).map(row=>{
+        const date=parseAnyDate(row.date||row.occurredAt)||today;
+        const amount=parseInt(String(row.amount||'').replace(/[^0-9]/g,''),10)||0;
+        const shop=String(row.shop||'PayPay').trim()||'PayPay';
+        const type=String(row.type||'payment').toLowerCase()==='refund'?'収入':'支出';
+        return {
+          shop,date,occurredAt:normalizeOccurredAt(row.occurredAt,date),amount,
+          category:CATS.includes(row.category)?row.category:inferCategoryForShop(shop,'雑費'),
+          memo:type==='収入'?'PayPay返金':'',source:'paypay',type,
+          paypayTransactionId:String(row.transactionId||'').trim()
+        };
+      }).filter(row=>row.amount>0);
+      if(!normalized.length) throw new Error('支払いを読み取れませんでした');
+      const filtered=filterNewPayPayTransactions(normalized);
+      pending=filtered.fresh; receiptDuplicateCount=filtered.duplicates;
+      if(!pending.length){
+        setReceiptError(`画面内の${receiptDuplicateCount}件はすべて登録済みです。`);
+        return;
+      }
+    }else{
+      // レシートは合計金額1件として登録する。
+      const totalAmt=parseInt(String(p.total||'').replace(/[^0-9]/g,''),10)||(p.items||[]).reduce((s,i)=>s+(Number(i.amount)||0),0);
+      if(!totalAmt||totalAmt<=0) throw new Error('金額を読み取れませんでした');
+      const catCount={};
+      (p.items||[]).forEach(it=>{catCount[it.category]=(catCount[it.category]||0)+1;});
+      const topCat=CATS.includes(p.category)?p.category:Object.entries(catCount).sort((a,b)=>b[1]-a[1])[0]?.[0]||inferCategoryForShop(p.shop,'食費');
+      const sourceRef=imageFingerprint?`receipt-image:${imageFingerprint}`:'';
+      if(hasSourceReference(sourceRef)){
+        setReceiptError('このレシートはすでに登録されています。');
+        return;
+      }
+      pending=[{
+        shop:p.shop||'不明',date:parseAnyDate(p.date)||today,amount:totalAmt,category:topCat,memo:'',
+        source:'receipt',type:'支出',sourceRef,paypayTransactionId:'',occurredAt:''
+      }];
+    }
     openModal(p);
     succeeded=true;
   }catch(e){
@@ -1760,19 +1921,22 @@ document.getElementById('receiptRetryBtn').onclick=()=>{
 };
 
 function openModal(p){
-  const it = pending[0];
-  document.getElementById('sheetInfo').textContent=`📍 ${p.shop}  ·  ${p.date}`;
-  document.getElementById('sheetItems').innerHTML=`
+  const isPayPay=pending[0]?.source==='paypay';
+  document.getElementById('sheetInfo').textContent=isPayPay
+    ? `PayPay · 未登録 ${pending.length}件${receiptDuplicateCount?`（登録済み ${receiptDuplicateCount}件を除外）`:''}`
+    : `レシート · 📍 ${pending[0].shop} · ${pending[0].date}`;
+  document.getElementById('sheetItems').innerHTML=pending.map((it,index)=>`
     <div class="sheet-item">
-      <div class="sheet-item-name" style="font-size:15px;font-weight:700">${h(p.shop)}</div>
-      <div class="sheet-item-price" style="font-size:18px">¥${it.amount.toLocaleString()}</div>
+      <div class="sheet-item-name" style="font-size:15px;font-weight:700">${h(it.shop)}<div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px">${h(it.occurredAt||it.date)}${it.type==='収入'?' · 返金':''}</div></div>
+      <div class="sheet-item-price" style="font-size:18px;color:${it.type==='収入'?'var(--green)':'var(--accent)'}">${it.type==='収入'?'+':'-'}¥${it.amount.toLocaleString()}</div>
       <div class="sheet-item-cat">
-        <select id="sc-0">${CATS.map(c=>`<option${c===it.category?' selected':''}>${c}</option>`).join('')}</select>
+        <select id="sc-${index}">${CATS.map(c=>`<option${c===it.category?' selected':''}>${c}</option>`).join('')}</select>
       </div>
-    </div>
+    </div>`).join('')+`
     <div style="font-size:11px;color:var(--muted);margin-top:8px;padding:8px 0;border-top:1px solid var(--border)">
-      📋 レシート内 ${p.items?.length||0}品目 → 合計金額で1件登録
+      ${isPayPay?'📱 未登録の明細だけをまとめて登録します':'📋 レシート内 '+(p.items?.length||0)+'品目 → 合計金額で1件登録'}
     </div>`;
+  document.getElementById('modalSave').textContent=isPayPay?`${pending.length}件を保存する`:'保存する';
   document.getElementById('modalBg').classList.add('on');
 }
 document.getElementById('modalCancel').onclick=()=>document.getElementById('modalBg').classList.remove('on');
@@ -1780,16 +1944,35 @@ document.getElementById('modalBg').onclick=e=>{if(e.target===document.getElement
 document.getElementById('modalSave').onclick=async()=>{
   const btn=document.getElementById('modalSave');
   if(!beginSaving(btn)) return;
-  const cat = document.getElementById('sc-0')?.value || pending[0]?.category || '食費';
-  const it = pending[0];
-  const key=mkey(cy,cm);if(!DB[key])DB[key]=[];
-  DB[key].push({id:Date.now()+Math.random(),shop:it.shop,date:it.date,amount:it.amount,category:cat,memo:'',source:'receipt',type:'支出',receiptImage:receiptImageData});
-  try{ await save(DB); }
-  catch(e){ DB[key].pop(); setReceiptError('画像を含むデータを保存できませんでした。もう一度試してください。'); console.error(e); return; }
+  const imageRef=imageFingerprint||makeId();
+  const previousImage=IMAGES[imageRef];
+  if(receiptImageData) IMAGES[imageRef]=receiptImageData;
+  const inserted=[];
+  pending.forEach((it,index)=>{
+    const [itemYear,itemMonth]=it.date.slice(0,7).split('-').map(Number);
+    const key=mkey(itemYear,itemMonth);if(!DB[key])DB[key]=[];
+    const item={
+      id:makeId(),shop:it.shop,date:it.date,amount:it.amount,
+      category:document.getElementById(`sc-${index}`)?.value||it.category||'雑費',memo:it.memo||'',
+      source:it.source,type:it.type||'支出',receiptImageRef:imageRef,sourceRef:it.sourceRef||'',
+      paypayTransactionId:it.paypayTransactionId||'',occurredAt:it.occurredAt||''
+    };
+    DB[key].push(item);inserted.push([key,item.id]);
+  });
+  try{
+    const all=await fetchAll();
+    await pushAll({...all,db:DB,images:IMAGES});
+  }
+  catch(e){
+    inserted.forEach(([key,id])=>{DB[key]=DB[key].filter(item=>item.id!==id);});
+    if(previousImage===undefined) delete IMAGES[imageRef]; else IMAGES[imageRef]=previousImage;
+    setReceiptError('画像を含むデータを保存できませんでした。もう一度試してください。');console.error(e);return;
+  }
   finally{ endSaving(btn); }
+  const savedCount=inserted.length;
   document.getElementById('modalBg').classList.remove('on');
-  b64=null;receiptImageData=null;lastReceiptFile=null;clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
-  render();toast('保存したよ！','ok');
+  b64=null;receiptImageData=null;lastReceiptFile=null;imageFingerprint=null;receiptDuplicateCount=0;pending=[];clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
+  render();toast(`${savedCount}件保存したよ！`,'ok');
 };
 
 /* ── MANUAL ADD ── */
@@ -1805,8 +1988,9 @@ document.getElementById('addBtn').onclick=async()=>{
   if(!date){toast('日付を選んでね','err');return;}
   const btn=document.getElementById('addBtn');
   if(!beginSaving(btn,'登録中...')) return;
-  const key=mkey(cy,cm);if(!DB[key])DB[key]=[];
-  DB[key].push({id:Date.now(),shop,amount,date,category,memo,source:'manual',type});
+  const [itemYear,itemMonth]=date.slice(0,7).split('-').map(Number);
+  const key=mkey(itemYear,itemMonth);if(!DB[key])DB[key]=[];
+  DB[key].push({id:makeId(),shop,amount,date,category,memo,source:'manual',type});
   try{ await save(DB); }
   catch(e){ DB[key].pop(); toast('保存できませんでした。もう一度試してね','err'); console.error(e); return; }
   finally{ endSaving(btn); }
@@ -1815,7 +1999,7 @@ document.getElementById('addBtn').onclick=async()=>{
 };
 
 /* ── CSV IMPORT ── */
-let csvParsed=[];
+let csvParsed=[],csvImportMeta={format:'general',duplicates:0,skipped:0};
 const csvDz=document.getElementById('csvDropZone'),csvFi=document.getElementById('csvFileInput');
 csvDz.addEventListener('dragover',e=>{e.preventDefault();csvDz.classList.add('over');});
 csvDz.addEventListener('dragleave',()=>csvDz.classList.remove('over'));
@@ -1835,9 +2019,9 @@ function handleImportFile(file){
         }
         const wb=XLSX.read(e.target.result,{type:'array'});
         const ws=wb.Sheets[wb.SheetNames[0]];
-        rows=parseRows(XLSX.utils.sheet_to_json(ws,{defval:''}));
+        rows=parseImportRows(XLSX.utils.sheet_to_json(ws,{defval:''}));
       } else {
-        rows=parseRows(csvToObjects(new TextDecoder('UTF-8').decode(e.target.result)));
+        rows=parseImportRows(csvToObjects(new TextDecoder('UTF-8').decode(e.target.result)));
       }
       csvParsed=rows; showCsvPreview(rows);
     }catch(err){toast('ファイルの読み込みに失敗しました','err');}
@@ -1847,22 +2031,73 @@ function handleImportFile(file){
 }
 
 function csvToObjects(text){
-  const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim());
-  if(lines.length<2) throw new Error('空');
-  const header=splitLine(lines[0]).map(c=>c.replace(/[""]/g,'').trim());
-  return lines.slice(1).map(line=>{const vals=splitLine(line).map(c=>c.replace(/[""]/g,'').trim());const obj={};header.forEach((h,i)=>{obj[h]=vals[i]??'';});return obj;});
+  const rows=[];let row=[],cell='',inQuotes=false;
+  const src=String(text||'').replace(/^\uFEFF/,'');
+  for(let i=0;i<src.length;i++){
+    const ch=src[i];
+    if(ch==='"'){
+      if(inQuotes&&src[i+1]==='"'){cell+='"';i++;}
+      else inQuotes=!inQuotes;
+    }else if(ch===','&&!inQuotes){row.push(cell);cell='';}
+    else if((ch==='\n'||ch==='\r')&&!inQuotes){
+      if(ch==='\r'&&src[i+1]==='\n')i++;
+      row.push(cell);cell='';
+      if(row.some(value=>String(value).trim()!==''))rows.push(row);
+      row=[];
+    }else cell+=ch;
+  }
+  row.push(cell);if(row.some(value=>String(value).trim()!==''))rows.push(row);
+  if(rows.length<2) throw new Error('空');
+  const header=rows[0].map(value=>String(value).replace(/^\uFEFF/,'').trim());
+  return rows.slice(1).map(values=>{const obj={};header.forEach((key,i)=>{obj[key]=String(values[i]??'').trim();});return obj;});
 }
 
-function splitLine(line){
-  const res=[];let cur='',inQ=false;
-  for(let i=0;i<line.length;i++){
-    const c=line[i];
-    if((c==='"'||c==='\u201c')&&!inQ){inQ=true;continue;}
-    if((c==='"'||c==='\u201d')&&inQ){inQ=false;continue;}
-    if(c===','&&!inQ){res.push(cur.trim());cur='';continue;}
-    cur+=c;
-  }
-  res.push(cur.trim());return res;
+function parseImportRows(data){
+  const keys=Object.keys(data[0]||{}).map(key=>String(key).replace(/^\uFEFF/,'').trim());
+  const isPayPay=['取引日','出金金額（円）','入金金額（円）','取引内容','取引先','取引番号']
+    .every(required=>keys.includes(required));
+  csvImportMeta={format:isPayPay?'paypay':'general',duplicates:0,skipped:0};
+  return isPayPay?parsePayPayRows(data):parseRows(data);
+}
+
+function parsePayPayAmount(value){
+  return parseInt(String(value||'').normalize('NFKC').replace(/[^0-9-]/g,''),10)||0;
+}
+
+function parsePayPayRows(data){
+  const existing=new Set();
+  Object.values(DB).flat().forEach(item=>{
+    if(item.sourceRef)existing.add(item.sourceRef);
+    else if(item.paypayTransactionId)existing.add(`paypay:${item.paypayTransactionId}`);
+  });
+  const seen=new Set(existing),result=[];
+  data.forEach(row=>{
+    const content=String(row['取引内容']||'').trim();
+    const outgoing=parsePayPayAmount(row['出金金額（円）']);
+    const incoming=parsePayPayAmount(row['入金金額（円）']);
+    const isPayment=/支払い/.test(content)&&outgoing>0;
+    const isRefund=/返金/.test(content)&&incoming>0;
+    if(!isPayment&&!isRefund){csvImportMeta.skipped++;return;}
+    const rawDate=String(row['取引日']||'').trim();
+    const date=parseAnyDate(rawDate);
+    if(!date){csvImportMeta.skipped++;return;}
+    const shop=String(row['取引先']||'').trim()||'PayPay';
+    const transactionId=String(row['取引番号']||'').trim();
+    const fallbackKey=[rawDate,outgoing,incoming,shop,content].join('|');
+    const sourceRef=`paypay:${transactionId||fallbackKey}`;
+    if(seen.has(sourceRef)){csvImportMeta.duplicates++;return;}
+    seen.add(sourceRef);
+    const method=String(row['取引方法']||'').trim();
+    result.push({
+      date,amount:isPayment?outgoing:incoming,
+      category:inferCategoryForShop(shop,'雑費'),shop,
+      memo:[isRefund?'PayPay返金':'PayPay',method].filter(Boolean).join('・'),
+      source:'paypay',type:isPayment?'支出':'収入',sourceRef,
+      paypayTransactionId:transactionId,paymentMethod:method
+    });
+  });
+  if(!result.length&&!csvImportMeta.duplicates) throw new Error('有効なPayPay支払いがありません');
+  return result;
 }
 
 function parseRows(data){
@@ -1901,7 +2136,12 @@ function showCsvPreview(rows){
   const byMonth={};
   rows.forEach(r=>{const k=r.date.slice(0,7);if(!byMonth[k])byMonth[k]={exp:0,inc:0,count:0};byMonth[k].count++;if(r.type==='収入')byMonth[k].inc+=r.amount;else byMonth[k].exp+=r.amount;});
   const months=Object.keys(byMonth).sort();
-  document.getElementById('csvSummary').innerHTML=`<strong>${rows.length}件</strong> を読み込んだよ（${months.length}ヶ月分）<br>`+months.map(m=>{const b=byMonth[m];return `${m}：支出 ¥${b.exp.toLocaleString()} / 収入 ¥${b.inc.toLocaleString()} (${b.count}件)`;}).join('<br>');
+  const isPayPay=csvImportMeta.format==='paypay';
+  document.getElementById('csvFormatLabel').textContent=isPayPay?'PayPay公式CSVとして読み込みました':'CSV / Excelとして読み込みました';
+  const notes=isPayPay
+    ? `<br>登録済み ${csvImportMeta.duplicates}件を除外・支払い以外 ${csvImportMeta.skipped}件を除外`
+    : '';
+  document.getElementById('csvSummary').innerHTML=`<strong>新しく追加する ${rows.length}件</strong>（${months.length}ヶ月分）${notes}<br>`+months.map(m=>{const b=byMonth[m];return `${m}：支出 ¥${b.exp.toLocaleString()} / 収入 ¥${b.inc.toLocaleString()} (${b.count}件)`;}).join('<br>');
   document.getElementById('csvPreviewList').innerHTML=rows.slice(0,30).map(r=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px">
       <div><div style="font-weight:700">${h(r.shop)}</div><div style="color:var(--muted)">${r.date} · ${h(r.category)}</div></div>
@@ -1909,19 +2149,25 @@ function showCsvPreview(rows){
     </div>`).join('')+(rows.length>30?`<div style="padding:10px 12px;font-size:11px;color:var(--muted);text-align:center">…他 ${rows.length-30} 件</div>`:'');
   document.getElementById('csvPreview').style.display='block';
   document.getElementById('csvDropZone').style.display='none';
+  document.getElementById('csvImportBtn').disabled=rows.length===0;
 }
 
-document.getElementById('csvCancelBtn').onclick=()=>{csvParsed=[];document.getElementById('csvPreview').style.display='none';document.getElementById('csvDropZone').style.display='block';csvFi.value='';};
+document.getElementById('csvCancelBtn').onclick=()=>{csvParsed=[];csvImportMeta={format:'general',duplicates:0,skipped:0};document.getElementById('csvPreview').style.display='none';document.getElementById('csvDropZone').style.display='block';document.getElementById('csvFormatLabel').textContent='';csvFi.value='';};
 document.getElementById('csvImportBtn').onclick=async()=>{
   const btn=document.getElementById('csvImportBtn');
   if(!beginSaving(btn,'インポート中...')) return;
   let added=0;
   const inserted=[];
   csvParsed.forEach(r=>{
+    if(r.sourceRef&&hasSourceReference(r.sourceRef)) return;
     const [y,m]=r.date.slice(0,7).split('-');
     const k=mkey(parseInt(y),parseInt(m));
     if(!DB[k])DB[k]=[];
-    const item={id:Date.now()+Math.random(),shop:r.shop,amount:r.amount,date:r.date,category:r.category,memo:r.memo,source:'csv',type:r.type};
+    const item={
+      id:makeId(),shop:r.shop,amount:r.amount,date:r.date,category:r.category,memo:r.memo,
+      source:r.source||'csv',type:r.type,sourceRef:r.sourceRef||'',
+      paypayTransactionId:r.paypayTransactionId||'',paymentMethod:r.paymentMethod||''
+    };
     DB[k].push(item); inserted.push([k,item.id]);
     added++;
   });
@@ -1932,7 +2178,7 @@ document.getElementById('csvImportBtn').onclick=async()=>{
     console.error(e);
     return;
   } finally { endSaving(btn); }
-  csvParsed=[];document.getElementById('csvPreview').style.display='none';document.getElementById('csvDropZone').style.display='block';csvFi.value='';
+  csvParsed=[];csvImportMeta={format:'general',duplicates:0,skipped:0};document.getElementById('csvPreview').style.display='none';document.getElementById('csvDropZone').style.display='block';document.getElementById('csvFormatLabel').textContent='';csvFi.value='';
   render();toast(`${added}件をインポートしたよ！`,'ok');
 };
 
@@ -1940,13 +2186,27 @@ document.getElementById('csvImportBtn').onclick=async()=>{
 async function del(i){
   const key=mkey(cy,cm), item=DB[key]?.[i];
   if(!item) return;
+  const previousDeleted=[...RECUR_DELETED];
+  const removedImage=item.receiptImageRef?IMAGES[item.receiptImageRef]:undefined;
   if(item.recurId){
     const deletionKey=`${item.recurId}:${key}`;
     if(!RECUR_DELETED.includes(deletionKey)) RECUR_DELETED.push(deletionKey);
   }
   DB[key].splice(i,1);
-  const all=await fetchAll();
-  await pushAll({...all,db:DB,recurDeleted:RECUR_DELETED});
+  if(item.receiptImageRef&&!Object.values(DB).flat().some(other=>other.receiptImageRef===item.receiptImageRef)){
+    delete IMAGES[item.receiptImageRef];
+  }
+  try{
+    const all=await fetchAll();
+    await pushAll({...all,db:DB,recurDeleted:RECUR_DELETED,images:IMAGES});
+  }catch(e){
+    DB[key].splice(i,0,item);
+    RECUR_DELETED=previousDeleted;
+    if(item.receiptImageRef&&removedImage!==undefined) IMAGES[item.receiptImageRef]=removedImage;
+    toast('削除を保存できませんでした。もう一度試してね','err');
+    console.error(e);
+    return;
+  }
   render();toast('削除しました','ok');
 }
 
