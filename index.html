@@ -301,6 +301,14 @@
   .sheet-item:last-of-type { border-bottom: none; }
   .sheet-item-name { font-size: 13px; font-weight: 700; }
   .sheet-item-price { font-size: 14px; font-weight: 700; color: var(--accent); font-family: var(--mono); text-align: right; }
+  .sheet-item-actions { display: flex; align-items: center; gap: 8px; }
+  .sheet-item-remove {
+    min-width: 40px; min-height: 40px; padding: 6px 9px;
+    background: #fff0f0; border: 1px solid #f3c1c1; border-radius: 8px;
+    color: var(--red); font-family: var(--font); font-size: 11px; font-weight: 700;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .sheet-item-remove:active { background: var(--red); color: #fff; }
   .sheet-item-cat { grid-column: 1 / -1; }
   .sheet-item-cat select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 16px; padding: 8px 12px; border-radius: 8px; outline: none; -webkit-appearance: none; }
   .sheet-actions { display: flex; gap: 10px; margin-top: 18px; }
@@ -963,7 +971,7 @@ async function saveB(d) { const a=await fetchAll(); await pushAll({...a,budget:d
 async function loadRecurDeleted() { const d=await fetchAll(); return d.recurDeleted||[]; }
 
 /* ── STATE ── */
-let DB={}, RECUR=[], BUDGET={}, RECUR_DELETED=[], IMAGES={}, cy, cm, pending=[], editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
+let DB={}, RECUR=[], BUDGET={}, RECUR_DELETED=[], IMAGES={}, cy, cm, pending=[], pendingModalMeta=null, editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
 
 /* ── INIT ── */
 async function initApp(){
@@ -2034,16 +2042,34 @@ document.getElementById('receiptRetryBtn').onclick=()=>{
 };
 
 function openModal(p){
+  pendingModalMeta=p;
+  renderPendingModal();
+  document.getElementById('modalBg').classList.add('on');
+}
+
+function renderPendingModal(){
+  const p=pendingModalMeta||{};
   const isPayPay=pending[0]?.source==='paypay';
   const isLine=pending[0]?.source==='line';
   const isBatch=isPayPay||isLine;
+  const saveBtn=document.getElementById('modalSave');
+  if(!pending.length){
+    document.getElementById('sheetInfo').textContent='登録する明細がありません';
+    document.getElementById('sheetItems').innerHTML='<div style="padding:24px 8px;text-align:center;color:var(--muted);font-size:13px">すべて一覧から外しました</div>';
+    saveBtn.textContent='保存する明細なし';
+    saveBtn.disabled=true;
+    return;
+  }
   document.getElementById('sheetInfo').textContent=isBatch
     ? `${isLine?'LINE':'PayPay'} · 未登録 ${pending.length}件${receiptDuplicateCount?`（登録済み ${receiptDuplicateCount}件を除外）`:''}`
     : `レシート · 📍 ${pending[0].shop} · ${pending[0].date}`;
   document.getElementById('sheetItems').innerHTML=pending.map((it,index)=>`
     <div class="sheet-item">
       <div class="sheet-item-name" style="font-size:15px;font-weight:700">${h(it.shop)}<div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px">${h(it.occurredAt||it.date)}${it.type==='収入'?' · 返金':''}</div></div>
-      <div class="sheet-item-price" style="font-size:18px;color:${it.type==='収入'?'var(--green)':'var(--accent)'}">${it.type==='収入'?'+':'-'}¥${it.amount.toLocaleString()}</div>
+      <div class="sheet-item-actions">
+        <div class="sheet-item-price" style="font-size:18px;color:${it.type==='収入'?'var(--green)':'var(--accent)'}">${it.type==='収入'?'+':'-'}¥${it.amount.toLocaleString()}</div>
+        ${isBatch?`<button type="button" class="sheet-item-remove" onclick="removePendingItem(${index})" aria-label="今回の登録から外す">外す</button>`:''}
+      </div>
       <div class="sheet-item-cat">
         <select id="sc-${index}">${CATS.map(c=>`<option${c===it.category?' selected':''}>${c}</option>`).join('')}</select>
       </div>
@@ -2051,10 +2077,22 @@ function openModal(p){
     <div style="font-size:11px;color:var(--muted);margin-top:8px;padding:8px 0;border-top:1px solid var(--border)">
       ${isBatch?`📱 ${isLine?'LINE内':'未登録'}の明細だけをまとめて登録します`:'📋 レシート内 '+(p.items?.length||0)+'品目 → 合計金額で1件登録'}
     </div>`;
-  document.getElementById('modalSave').textContent=isBatch?`${pending.length}件を保存する`:'保存する';
-  document.getElementById('modalBg').classList.add('on');
+  saveBtn.textContent=isBatch?`${pending.length}件を保存する`:'保存する';
+  saveBtn.disabled=false;
 }
-document.getElementById('modalCancel').onclick=()=>document.getElementById('modalBg').classList.remove('on');
+
+function removePendingItem(index){
+  pending=pending.map((item,itemIndex)=>({
+    ...item,
+    category:document.getElementById(`sc-${itemIndex}`)?.value||item.category
+  }));
+  pending.splice(index,1);
+  renderPendingModal();
+}
+document.getElementById('modalCancel').onclick=()=>{
+  document.getElementById('modalBg').classList.remove('on');
+  if(b64) document.getElementById('analyzeBtn').style.display='block';
+};
 document.getElementById('modalBg').onclick=e=>{if(e.target===document.getElementById('modalBg'))document.getElementById('modalBg').classList.remove('on');};
 document.getElementById('modalSave').onclick=async()=>{
   const btn=document.getElementById('modalSave');
@@ -2086,7 +2124,7 @@ document.getElementById('modalSave').onclick=async()=>{
   finally{ endSaving(btn); }
   const savedCount=inserted.length;
   document.getElementById('modalBg').classList.remove('on');
-  b64=null;receiptImageData=null;lastReceiptFile=null;imageFingerprint=null;receiptDuplicateCount=0;pending=[];clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
+  b64=null;receiptImageData=null;lastReceiptFile=null;imageFingerprint=null;receiptDuplicateCount=0;pending=[];pendingModalMeta=null;clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
   render();toast(`${savedCount}件保存したよ！`,'ok');
 };
 
