@@ -232,6 +232,20 @@
   .amount-calc-btn:active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .amount-calc-btn.amount-equals { background: var(--accent); border-color: var(--accent); color: #fff; }
   .amount-calc-hint { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+  .manual-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .manual-label-row .flabel { margin-bottom: 0; }
+  .places-open-btn {
+    min-height: 36px; padding: 6px 10px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--accent); font-family: var(--font); font-size: 11px; font-weight: 700;
+    cursor: pointer; touch-action: manipulation;
+  }
+  .places-open-btn:active { background: var(--accent); color: #fff; }
+  .place-list { display: grid; gap: 8px; margin-top: 14px; }
+  .place-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 11px 12px; background: var(--surface2); border-radius: 10px; }
+  .place-row-name { font-size: 14px; font-weight: 700; }
+  .place-row-meta { color: var(--muted); font-size: 10px; }
+  .place-delete { grid-column: 2; grid-row: 1 / 3; min-width: 42px; min-height: 40px; padding: 6px 9px; background: #fff0f0; border: 1px solid #f3c1c1; border-radius: 8px; color: var(--red); font-family: var(--font); font-size: 11px; font-weight: 700; cursor: pointer; }
+  .places-empty { padding: 22px 8px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.8; }
 
   /* ════════════════════════
      HISTORY
@@ -311,6 +325,11 @@
   .sheet-item-remove:active { background: var(--red); color: #fff; }
   .sheet-item-cat { grid-column: 1 / -1; }
   .sheet-item-cat select { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 16px; padding: 8px 12px; border-radius: 8px; outline: none; -webkit-appearance: none; }
+  .sheet-shop-input { width: 100%; padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: var(--font); font-size: 16px; font-weight: 700; outline: none; }
+  .sheet-shop-input:focus { border-color: var(--accent); }
+  .place-match-note { grid-column: 1 / -1; padding: 7px 9px; background: #effaf4; border-radius: 7px; color: #397a57; font-size: 11px; line-height: 1.5; }
+  .place-candidate { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px; padding: 8px 9px; background: #fff8e8; border-radius: 7px; color: #8b6720; font-size: 11px; line-height: 1.5; cursor: pointer; }
+  .place-candidate input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--accent); }
   .sheet-actions { display: flex; gap: 10px; margin-top: 18px; }
   .sheet-cancel { flex: 1; padding: 14px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); border-radius: 12px; font-family: var(--font); font-size: 14px; cursor: pointer; touch-action: manipulation; }
   .sheet-save { flex: 2; padding: 14px; background: var(--accent); border: none; color: #fff; border-radius: 12px; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
@@ -551,7 +570,11 @@
       <button class="btn btn-outline" id="receiptRetryBtn">↻ もう一度試す</button>
     </div>
     <div class="add-panel" id="panel-manual">
-      <div class="fg" style="margin-bottom:8px"><label class="flabel">店名 / サービス名</label><input class="finput" id="m-shop" type="text" placeholder="例：Netflix、スタバ" autocomplete="off" style="padding:10px 12px;font-size:16px"></div>
+      <div class="fg" style="margin-bottom:8px">
+        <div class="manual-label-row"><label class="flabel">店名 / サービス名</label><button type="button" class="places-open-btn" id="openPlacesBtn">⭐ よく使う場所</button></div>
+        <input class="finput" id="m-shop" type="text" list="placeSuggestions" placeholder="例：Netflix、スタバ" autocomplete="off" style="padding:10px 12px;font-size:16px">
+        <datalist id="placeSuggestions"></datalist>
+      </div>
       <div class="frow" style="gap:8px">
         <div class="fg" style="margin-bottom:8px"><label class="flabel">金額（円）</label><input class="finput" id="m-amount" type="text" placeholder="例：1200＋350" inputmode="decimal" data-amount-calc style="padding:10px 12px;font-size:16px"><div class="amount-calc-hint">計算式を入力できます</div></div>
         <div class="fg" style="margin-bottom:8px"><label class="flabel">日付</label><input class="finput" id="m-date" type="date" style="padding:10px 12px;font-size:16px"></div>
@@ -636,6 +659,20 @@
       <button class="sheet-cancel" id="modalCancel">キャンセル</button>
       <button class="sheet-save" id="modalSave">保存する</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL: FREQUENT PLACES -->
+<div class="modal-bg" id="placesModalBg">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">よく使う場所 <em>⭐</em></div>
+    <div class="sheet-info">AI解析の店名に表記ゆれがあっても、登録名に自動でそろえます。</div>
+    <div class="fg"><label class="flabel">正式な店名 / サービス名</label><input class="finput" id="place-name" type="text" placeholder="例：スターバックス 横浜店" autocomplete="off"></div>
+    <div class="fg"><label class="flabel">カテゴリ</label><select class="fselect" id="place-cat"></select></div>
+    <button type="button" class="btn btn-solid" id="placeAddBtn">この場所を登録</button>
+    <div class="place-list" id="placesList"></div>
+    <div style="margin-top:16px"><button type="button" class="sheet-cancel" id="placesCloseBtn" style="width:100%">閉じる</button></div>
   </div>
 </div>
 
@@ -969,18 +1006,20 @@ async function saveR(d) { const a=await fetchAll(); await pushAll({...a,recur:d}
 async function loadB()  { const d=await fetchAll(); return d.budget||{}; }
 async function saveB(d) { const a=await fetchAll(); await pushAll({...a,budget:d}); }
 async function loadRecurDeleted() { const d=await fetchAll(); return d.recurDeleted||[]; }
+async function savePlaces(d) { const a=await fetchAll(); await pushAll({...a,places:d}); }
 
 /* ── STATE ── */
-let DB={}, RECUR=[], BUDGET={}, RECUR_DELETED=[], IMAGES={}, cy, cm, pending=[], pendingModalMeta=null, editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
+let DB={}, RECUR=[], BUDGET={}, RECUR_DELETED=[], IMAGES={}, PLACES=[], cy, cm, pending=[], pendingModalMeta=null, editRecurIdx=null, activeCatFilter='all', editInstanceIdx=null;
 
 /* ── INIT ── */
 async function initApp(){
   document.getElementById('totalAmt').textContent='読込中...';
   const all=await fetchAll();
-  DB=all.db||{}; RECUR=all.recur||[]; BUDGET=all.budget||{}; RECUR_DELETED=all.recurDeleted||[]; IMAGES=all.images||{};
+  DB=all.db||{}; RECUR=all.recur||[]; BUDGET=all.budget||{}; RECUR_DELETED=all.recurDeleted||[]; IMAGES=all.images||{}; PLACES=Array.isArray(all.places)?all.places:[];
   const now=new Date();
   cy=now.getFullYear(); cm=now.getMonth()+1;
   document.getElementById('m-date').value=now.toISOString().slice(0,10);
+  renderPlaceSuggestions();
   await applyRecurring();
   initDesktop();
   render();
@@ -1004,6 +1043,7 @@ async function initApp(){
 function mkey(y,m){return `${y}-${String(m).padStart(2,'0')}`;}
 function cur(){return DB[mkey(cy,cm)]||[];}
 function h(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function ha(s){return h(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function makeId(){return globalThis.crypto?.randomUUID?globalThis.crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;}
 
 /* 保存中の連打による二重登録を防止 */
@@ -1031,7 +1071,8 @@ document.getElementById('refreshBtn').onclick=async()=>{
   btn.style.transition='transform 0.5s';
   try{
     const all=await fetchAll();
-    DB=all.db||{}; RECUR=all.recur||[]; BUDGET=all.budget||{}; RECUR_DELETED=all.recurDeleted||[]; IMAGES=all.images||{};
+    DB=all.db||{}; RECUR=all.recur||[]; BUDGET=all.budget||{}; RECUR_DELETED=all.recurDeleted||[]; IMAGES=all.images||{}; PLACES=Array.isArray(all.places)?all.places:[];
+    renderPlaceSuggestions();
     await applyRecurring();
     render();
     toast('更新しました','ok');
@@ -1813,6 +1854,56 @@ async function sha256Text(text){
 function normalizeShopName(value){
   return String(value||'').normalize('NFKC').toLowerCase().replace(/[\s　]/g,'').replace(/[・･]/g,'');
 }
+function normalizePlaceName(value){
+  return normalizeShopName(value)
+    .replace(/[!！?？"'“”‘’`´,，.。:：;；/／\\|｜()（）\[\]【】「」『』<>＜＞・･\-_ー―–—]/g,'')
+    .replace(/^(株式会社|有限会社|合同会社|\(株\)|株\))/,'');
+}
+function placeBigrams(value){
+  const text=normalizePlaceName(value), grams=[];
+  for(let i=0;i<text.length-1;i++) grams.push(text.slice(i,i+2));
+  return grams;
+}
+function placeSimilarity(a,b){
+  const left=normalizePlaceName(a),right=normalizePlaceName(b);
+  if(!left||!right) return 0;
+  if(left===right) return 1;
+  const shorter=Math.min(left.length,right.length),longer=Math.max(left.length,right.length);
+  if(shorter>=4&&(left.includes(right)||right.includes(left))&&shorter/longer>=0.82) return 0.93;
+  if(shorter<4) return 0;
+  const ag=placeBigrams(left),bg=placeBigrams(right),remaining=[...bg];
+  let common=0;
+  ag.forEach(gram=>{const index=remaining.indexOf(gram);if(index>=0){common++;remaining.splice(index,1);}});
+  return ag.length+bg.length?2*common/(ag.length+bg.length):0;
+}
+function findRegisteredPlace(shop){
+  let best=null;
+  PLACES.forEach(place=>{
+    const names=[place.name,...(Array.isArray(place.aliases)?place.aliases:[])];
+    const score=Math.max(0,...names.map(name=>placeSimilarity(shop,name)));
+    if(!best||score>best.score) best={place,score};
+  });
+  return best&&best.score>=0.84?best:null;
+}
+function applyRegisteredPlace(item){
+  const originalShop=String(item.shop||'').trim();
+  const match=findRegisteredPlace(originalShop);
+  if(!match) return {...item,originalShop,placeCandidate:true,placeMatchId:''};
+  return {
+    ...item,originalShop,shop:match.place.name,
+    category:CATS.includes(match.place.category)?match.place.category:item.category,
+    placeCandidate:false,placeMatchId:match.place.id,placeMatchScore:match.score
+  };
+}
+function renderPlaceSuggestions(){
+  const list=document.getElementById('placeSuggestions');
+  if(list) list.innerHTML=PLACES.map(place=>`<option value="${ha(place.name)}">${h(place.category||'')}</option>`).join('');
+}
+function syncManualPlaceCategory(){
+  const shop=document.getElementById('m-shop').value.trim();
+  const match=findRegisteredPlace(shop);
+  if(match&&CATS.includes(match.place.category)) document.getElementById('m-cat').value=match.place.category;
+}
 function inferCategoryForShop(shop,fallback='雑費'){
   const target=normalizeShopName(shop);
   if(!target) return fallback;
@@ -1998,7 +2089,7 @@ async function analyzeReceipt(){
           memo:isLine?String(row.memo||'LINEから登録').trim():(type==='収入'?'PayPay返金':''),source:isLine?'line':'paypay',type,
           paypayTransactionId:String(row.transactionId||'').trim()
         };
-      }).filter(row=>row.amount>0);
+      }).filter(row=>row.amount>0).map(applyRegisteredPlace);
       if(!normalized.length) throw new Error('支払いを読み取れませんでした');
       const filtered=isLine?filterNewLineTransactions(normalized):filterNewPayPayTransactions(normalized);
       pending=filtered.fresh; receiptDuplicateCount=filtered.duplicates;
@@ -2018,10 +2109,10 @@ async function analyzeReceipt(){
         setReceiptError('このレシートはすでに登録されています。');
         return;
       }
-      pending=[{
+      pending=[applyRegisteredPlace({
         shop:p.shop||'不明',date:parseAnyDate(p.date)||today,amount:totalAmt,category:topCat,memo:'',
         source:'receipt',type:'支出',sourceRef,paypayTransactionId:'',occurredAt:''
-      }];
+      })];
     }
     openModal(p);
     succeeded=true;
@@ -2065,7 +2156,7 @@ function renderPendingModal(){
     : `レシート · 📍 ${pending[0].shop} · ${pending[0].date}`;
   document.getElementById('sheetItems').innerHTML=pending.map((it,index)=>`
     <div class="sheet-item">
-      <div class="sheet-item-name" style="font-size:15px;font-weight:700">${h(it.shop)}<div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px">${h(it.occurredAt||it.date)}${it.type==='収入'?' · 返金':''}</div></div>
+      <div class="sheet-item-name"><input class="sheet-shop-input" id="ss-${index}" type="text" value="${ha(it.shop)}" aria-label="店名"><div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:3px">${h(it.occurredAt||it.date)}${it.type==='収入'?' · 返金':''}</div></div>
       <div class="sheet-item-actions">
         <div class="sheet-item-price" style="font-size:18px;color:${it.type==='収入'?'var(--green)':'var(--accent)'}">${it.type==='収入'?'+':'-'}¥${it.amount.toLocaleString()}</div>
         ${isBatch?`<button type="button" class="sheet-item-remove" onclick="removePendingItem(${index})" aria-label="今回の登録から外す">外す</button>`:''}
@@ -2073,6 +2164,9 @@ function renderPendingModal(){
       <div class="sheet-item-cat">
         <select id="sc-${index}">${CATS.map(c=>`<option${c===it.category?' selected':''}>${c}</option>`).join('')}</select>
       </div>
+      ${it.placeMatchId
+        ? `<div class="place-match-note">⭐ 登録済みの「${h(it.shop)}」に一致しました${it.originalShop&&it.originalShop!==it.shop?`（解析名：${h(it.originalShop)}）`:''}</div>`
+        : `<label class="place-candidate"><input type="checkbox" id="sp-${index}"${it.registerPlace?' checked':''}><span>一致する登録がありません。店名を確認・修正して、この場所を「よく使う場所」に登録する</span></label>`}
     </div>`).join('')+`
     <div style="font-size:11px;color:var(--muted);margin-top:8px;padding:8px 0;border-top:1px solid var(--border)">
       ${isBatch?`📱 ${isLine?'LINE内':'未登録'}の明細だけをまとめて登録します`:'📋 レシート内 '+(p.items?.length||0)+'品目 → 合計金額で1件登録'}
@@ -2084,7 +2178,9 @@ function renderPendingModal(){
 function removePendingItem(index){
   pending=pending.map((item,itemIndex)=>({
     ...item,
-    category:document.getElementById(`sc-${itemIndex}`)?.value||item.category
+    shop:document.getElementById(`ss-${itemIndex}`)?.value.trim()||item.shop,
+    category:document.getElementById(`sc-${itemIndex}`)?.value||item.category,
+    registerPlace:document.getElementById(`sp-${itemIndex}`)?.checked||false
   }));
   pending.splice(index,1);
   renderPendingModal();
@@ -2096,17 +2192,30 @@ document.getElementById('modalCancel').onclick=()=>{
 document.getElementById('modalBg').onclick=e=>{if(e.target===document.getElementById('modalBg'))document.getElementById('modalBg').classList.remove('on');};
 document.getElementById('modalSave').onclick=async()=>{
   const btn=document.getElementById('modalSave');
+  pending=pending.map((item,index)=>({
+    ...item,
+    shop:document.getElementById(`ss-${index}`)?.value.trim()||'',
+    category:document.getElementById(`sc-${index}`)?.value||item.category,
+    registerPlace:document.getElementById(`sp-${index}`)?.checked||false
+  }));
+  if(pending.some(item=>!item.shop)){toast('店名を確認してね','err');return;}
   if(!beginSaving(btn)) return;
   const imageRef=imageFingerprint||makeId();
   const previousImage=IMAGES[imageRef];
+  const previousPlaces=PLACES.map(place=>({...place,aliases:[...(place.aliases||[])]}));
   if(receiptImageData) IMAGES[imageRef]=receiptImageData;
+  pending.filter(item=>item.registerPlace&&!item.placeMatchId).forEach(item=>{
+    if(findRegisteredPlace(item.shop)) return;
+    const aliases=item.originalShop&&normalizePlaceName(item.originalShop)!==normalizePlaceName(item.shop)?[item.originalShop]:[];
+    PLACES.push({id:makeId(),name:item.shop,aliases,category:item.category,createdAt:new Date().toISOString()});
+  });
   const inserted=[];
   pending.forEach((it,index)=>{
     const [itemYear,itemMonth]=it.date.slice(0,7).split('-').map(Number);
     const key=mkey(itemYear,itemMonth);if(!DB[key])DB[key]=[];
     const item={
       id:makeId(),shop:it.shop,date:it.date,amount:it.amount,
-      category:document.getElementById(`sc-${index}`)?.value||it.category||'雑費',memo:it.memo||'',
+      category:it.category||'雑費',memo:it.memo||'',
       source:it.source,type:it.type||'支出',receiptImageRef:imageRef,sourceRef:it.sourceRef||'',
       paypayTransactionId:it.paypayTransactionId||'',occurredAt:it.occurredAt||''
     };
@@ -2114,31 +2223,81 @@ document.getElementById('modalSave').onclick=async()=>{
   });
   try{
     const all=await fetchAll();
-    await pushAll({...all,db:DB,images:IMAGES});
+    await pushAll({...all,db:DB,images:IMAGES,places:PLACES});
   }
   catch(e){
     inserted.forEach(([key,id])=>{DB[key]=DB[key].filter(item=>item.id!==id);});
     if(previousImage===undefined) delete IMAGES[imageRef]; else IMAGES[imageRef]=previousImage;
+    PLACES=previousPlaces;
     setReceiptError('画像を含むデータを保存できませんでした。もう一度試してください。');console.error(e);return;
   }
   finally{ endSaving(btn); }
   const savedCount=inserted.length;
   document.getElementById('modalBg').classList.remove('on');
+  renderPlaceSuggestions();
   b64=null;receiptImageData=null;lastReceiptFile=null;imageFingerprint=null;receiptDuplicateCount=0;pending=[];pendingModalMeta=null;clearReceiptError();document.getElementById('preview').style.display='none';document.getElementById('analyzeBtn').style.display='none';fi.value='';
   render();toast(`${savedCount}件保存したよ！`,'ok');
 };
 
+/* ── FREQUENT PLACES ── */
+function renderPlaces(){
+  renderPlaceSuggestions();
+  const list=document.getElementById('placesList');
+  if(!list) return;
+  list.innerHTML=PLACES.length?PLACES.map(place=>`
+    <div class="place-row">
+      <div class="place-row-name">${h(place.name)}</div>
+      <div class="place-row-meta">${h(place.category||'カテゴリ未設定')}${place.aliases?.length?` · 表記ゆれ ${place.aliases.length}件`:''}</div>
+      <button type="button" class="place-delete" onclick="deletePlace('${ha(place.id)}')">削除</button>
+    </div>`).join(''):'<div class="places-empty">まだ登録されていません。<br>よく行く店やサービスを登録すると、AI解析の店名が安定します。</div>';
+}
+function openPlacesModal(){
+  document.getElementById('place-cat').innerHTML=CATS.map(cat=>`<option>${cat}</option>`).join('');
+  renderPlaces();
+  document.getElementById('placesModalBg').classList.add('on');
+}
+document.getElementById('openPlacesBtn').onclick=openPlacesModal;
+document.getElementById('placesCloseBtn').onclick=()=>document.getElementById('placesModalBg').classList.remove('on');
+document.getElementById('placesModalBg').onclick=event=>{if(event.target===event.currentTarget)event.currentTarget.classList.remove('on');};
+document.getElementById('m-shop').addEventListener('change',syncManualPlaceCategory);
+document.getElementById('placeAddBtn').onclick=async()=>{
+  const name=document.getElementById('place-name').value.trim();
+  const category=document.getElementById('place-cat').value;
+  if(!name){toast('場所の名前を入力してね','err');return;}
+  if(findRegisteredPlace(name)){toast('似た場所がすでに登録されています','err');return;}
+  const btn=document.getElementById('placeAddBtn');
+  if(!beginSaving(btn,'登録中...')) return;
+  const place={id:makeId(),name,aliases:[],category,createdAt:new Date().toISOString()};
+  PLACES.push(place);
+  try{
+    await savePlaces(PLACES);
+    document.getElementById('place-name').value='';
+    renderPlaces();toast(`「${name}」を登録したよ！`,'ok');
+  }catch(error){PLACES=PLACES.filter(item=>item.id!==place.id);toast('保存できませんでした','err');console.error(error);}
+  finally{endSaving(btn);}
+};
+async function deletePlace(id){
+  const place=PLACES.find(item=>item.id===id);
+  if(!place||!confirm(`「${place.name}」をよく使う場所から削除しますか？`)) return;
+  const previous=PLACES;
+  PLACES=PLACES.filter(item=>item.id!==id);
+  try{await savePlaces(PLACES);renderPlaces();toast('削除しました','ok');}
+  catch(error){PLACES=previous;renderPlaces();toast('削除できませんでした','err');console.error(error);}
+}
+
 /* ── MANUAL ADD ── */
 document.getElementById('addBtn').onclick=async()=>{
-  const shop=document.getElementById('m-shop').value.trim();
+  let shop=document.getElementById('m-shop').value.trim();
   const amount=readAmountInput('m-amount');
   const date=document.getElementById('m-date').value;
-  const category=document.getElementById('m-cat').value;
+  let category=document.getElementById('m-cat').value;
   const type=document.getElementById('m-type').value;
   const memo=document.getElementById('m-memo').value.trim();
   if(!shop){toast('店名を入力してね','err');return;}
   if(!amount||amount<=0){toast('金額を入力してね','err');return;}
   if(!date){toast('日付を選んでね','err');return;}
+  const registeredPlace=findRegisteredPlace(shop);
+  if(registeredPlace){shop=registeredPlace.place.name;category=registeredPlace.place.category||category;}
   const btn=document.getElementById('addBtn');
   if(!beginSaving(btn,'登録中...')) return;
   const [itemYear,itemMonth]=date.slice(0,7).split('-').map(Number);
